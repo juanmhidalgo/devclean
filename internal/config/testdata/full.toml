@@ -1,0 +1,30 @@
+pressure_percent = 90
+watch = ["/vm/*.qcow2", "/vm/disk.img"]
+observe_interval = "12h"
+clean_cadence = "daily"
+notify_command = "my-notifier --flag"
+
+[scan]
+roots = ["/work", "/play"]
+excludes = ["/work/keep"]
+
+[thresholds]
+projects = 30
+docker = 14
+
+[scan_burst]
+min_artifacts = 8
+window = "10m"
+
+[docker]
+ephemeral_label = "my.label=yes"
+ephemeral_globs = ["ci-*", "tmp/*"]
+
+[[artifact_types]]
+name = "build"
+marker = "Makefile"
+marker_location = "beside"
+
+[[cache_paths]]
+path = "/var/cache/thing"
+tier = "caches"

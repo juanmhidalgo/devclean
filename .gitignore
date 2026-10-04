@@ -12,3 +12,6 @@ coverage.*
 .idea/
 .vscode/
 .DS_Store
+
+# Local spec/plan working artifacts
+.feature-dev/
