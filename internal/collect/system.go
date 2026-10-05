@@ -30,7 +30,7 @@ func (s *System) Collect(ctx context.Context) Result {
 	for _, it := range items {
 		res.Candidates = append(res.Candidates, classify.Candidate{
 			Category: classify.CategorySystem, Tier: classify.TierManual,
-			Path: it.Name, Size: it.Size, Reason: it.Reason, ReclaimCmd: it.ReclaimCmd,
+			Path: it.Name, Size: it.Size, Reason: it.Reason, ReclaimCmd: it.ReclaimCmd, Tip: it.Tip,
 		})
 	}
 	for _, r := range skips {

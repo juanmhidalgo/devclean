@@ -30,7 +30,9 @@ devclean schedule uninstall
 - The report groups items that share a reason, lists the largest first and
   shows manual items as the command to run; a Docker volume that containers
   still mount shows those containers instead (`used_by` in JSON), since docker
-  refuses to remove it. Sizes devclean cannot measure (a
+  refuses to remove it. A closing Tips section says how to keep space from
+  growing back (journald `SystemMaxUse`, snap `refresh.retain`, anonymous
+  Docker volumes); `tip` in JSON. Sizes devclean cannot measure (a
   tool-native prune, a volume docker does not size) show as `-`, and as
   `"size_unknown": true` in JSON.
 - `schedule install` schedules `observe` hourly and `clean` on the configured

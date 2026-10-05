@@ -70,6 +70,8 @@ type SystemItem struct {
 	Size       int64
 	Reason     string
 	ReclaimCmd string
+	// Tip says how to keep the item from growing back, when there is a way.
+	Tip string
 }
 
 // Mount describes one mounted filesystem.

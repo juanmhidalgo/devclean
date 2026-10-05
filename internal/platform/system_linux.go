@@ -20,6 +20,14 @@ const (
 	journalTarget      = "500M"
 	journalTargetBytes = 500 << 20
 	snapDir            = "/var/lib/snapd/snaps"
+
+	// The reclaim commands are one-off; these say how to keep the space.
+	journalTip = "Vacuuming is one-off and the journal grows back. To cap it, put\n" +
+		"  [Journal]\n  SystemMaxUse=" + journalTarget + "\n" +
+		"in /etc/systemd/journald.conf.d/size.conf, then run\n" +
+		"sudo systemctl restart systemd-journald"
+	snapTip = "snapd keeps more than one old revision of some snaps. " +
+		"`sudo snap set system refresh.retain=2` keeps the fewest it allows: the current one and one before."
 )
 
 // SystemItems lists disabled snap revisions and an oversized systemd journal.
@@ -47,6 +55,7 @@ func (Linux) SystemItems(ctx context.Context) ([]SystemItem, []string) {
 			Size:       n,
 			Reason:     "systemd journal exceeds " + journalTarget,
 			ReclaimCmd: "sudo journalctl --vacuum-size=" + journalTarget,
+			Tip:        journalTip,
 		})
 	}
 	return items, skips
@@ -72,8 +81,12 @@ func runTool(ctx context.Context, name string, args ...string) (string, error) {
 }
 
 // parseSnapList returns the disabled revisions in `snap list --all` output.
+// They carry snapTip only when some snap keeps two or more of them: with
+// refresh.retain at its minimum of 2, every snap keeps at most one, and the
+// tip would advise what is already set.
 func parseSnapList(out string) []SystemItem {
 	var items []SystemItem
+	perSnap := map[string]int{}
 	for i, line := range strings.Split(out, "\n") {
 		f := strings.Fields(line)
 		if i == 0 || len(f) < 6 {
@@ -93,6 +106,15 @@ func parseSnapList(out string) []SystemItem {
 			Reason:     "disabled snap revision",
 			ReclaimCmd: fmt.Sprintf("sudo snap remove %s --revision=%s", name, rev),
 		})
+		perSnap[name]++
+	}
+	for _, n := range perSnap {
+		if n >= 2 {
+			for i := range items {
+				items[i].Tip = snapTip
+			}
+			break
+		}
 	}
 	return items
 }

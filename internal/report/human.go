@@ -115,6 +115,7 @@ func RenderHuman(w io.Writer, r Report) error {
 		ew.printf("%s%s\n\n", st.bold("Reclaimable (garbage+caches+stale)  "+formatSize(reclaimable)),
 			st.dim("   manual: "+formatSize(manual)))
 	}
+	writeTips(ew, st, r.Candidates)
 	writeTrailer(ew, r)
 	return ew.err
 }
@@ -184,7 +185,7 @@ func (v view) writeGroup(ew *errWriter, g []item) {
 	var anon int
 	var named []item
 	for _, it := range g {
-		if isVolume(it.c) && isAnonymousVolume(it.c.Path) {
+		if isVolume(it.c) && collect.IsAnonymousVolume(it.c.Path) {
 			anon++
 		} else {
 			named = append(named, it)
@@ -321,20 +322,6 @@ func isVolume(c classify.Candidate) bool {
 	return c.Category == classify.CategoryDocker && c.ReclaimCmd == "docker volume rm "+c.Path
 }
 
-// isAnonymousVolume reports whether name is the 64-hex name Docker gives a
-// volume nobody named.
-func isAnonymousVolume(name string) bool {
-	if len(name) != 64 {
-		return false
-	}
-	for _, r := range name {
-		if !strings.ContainsRune("0123456789abcdef", r) {
-			return false
-		}
-	}
-	return true
-}
-
 // tildePath shortens a path under home to ~/....
 func tildePath(p, home string) string {
 	if home == "" {
@@ -353,6 +340,76 @@ func tildeCommand(cmd, home string) string {
 		return cmd
 	}
 	return strings.ReplaceAll(cmd, " "+home+"/", " ~/")
+}
+
+// writeTips prints each distinct tip once, in order of first appearance. A
+// tip's continuation lines are indented under its bullet.
+func writeTips(ew *errWriter, st style, cands []classify.Candidate) {
+	seen := map[string]bool{}
+	var tips []string
+	for _, c := range cands {
+		if c.Tip != "" && !seen[c.Tip] {
+			seen[c.Tip] = true
+			tips = append(tips, c.Tip)
+		}
+	}
+	if len(tips) == 0 {
+		return
+	}
+	ew.printf("%s\n", st.bold("Tips"))
+	for _, t := range tips {
+		lines := wrapText(t, tipWidth)
+		ew.printf("  %s %s\n", st.wrap("•", sgrCyan), lines[0])
+		for _, l := range lines[1:] {
+			ew.printf("    %s\n", l)
+		}
+	}
+	ew.printf("\n")
+}
+
+// tipWidth is where tips wrap, leaving room for their 4-column indent.
+const tipWidth = 76
+
+// wrapText breaks text into lines of at most width runes at spaces, keeping
+// its own line breaks and the leading spaces of each line (indented
+// snippets). A `quoted command` is never split, and a word or command longer
+// than width gets a line of its own.
+func wrapText(text string, width int) []string {
+	var out []string
+	for _, para := range strings.Split(text, "\n") {
+		trimmed := strings.TrimLeft(para, " ")
+		line := para[:len(para)-len(trimmed)]
+		indent := len(line)
+		for _, w := range wrapWords(trimmed) {
+			if n := len([]rune(line)); n > indent && n+1+len([]rune(w)) > width {
+				out = append(out, line)
+				line = strings.Repeat(" ", indent)
+			}
+			if len([]rune(line)) > indent {
+				line += " "
+			}
+			line += w
+		}
+		out = append(out, line)
+	}
+	return out
+}
+
+// wrapWords splits s at spaces, keeping each `backquoted span` whole.
+func wrapWords(s string) []string {
+	var out []string
+	open := false
+	for _, f := range strings.Fields(s) {
+		if open {
+			out[len(out)-1] += " " + f
+		} else {
+			out = append(out, f)
+		}
+		if strings.Count(f, "`")%2 == 1 {
+			open = !open
+		}
+	}
+	return out
 }
 
 // writeTrailer writes the skipped collectors, warnings and notices that

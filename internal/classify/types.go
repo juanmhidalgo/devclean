@@ -87,7 +87,7 @@ type Candidate struct {
 	// UsedBy are the containers, running or not, that mount a docker
 	// volume. Docker refuses to remove the volume until they are removed.
 	UsedBy []string
-	Size int64
+	Size   int64
 	// SizeUnknown means Size was not measured (a tool-native prune, or a
 	// volume docker did not size): 0 then does not mean empty.
 	SizeUnknown bool
@@ -97,4 +97,7 @@ type Candidate struct {
 	LastUse LastUse
 	// ReclaimCmd is the command the user runs for manual items.
 	ReclaimCmd string
+	// Tip says how to keep the item from growing back; the report prints
+	// each distinct tip once.
+	Tip string
 }

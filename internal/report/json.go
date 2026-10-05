@@ -46,6 +46,8 @@ type jsonCandidate struct {
 	Command        string  `json:"command,omitempty"`
 	// UsedBy: the containers that must be removed before the volume can be.
 	UsedBy []string `json:"used_by,omitempty"`
+	// Tip says how to keep the item from growing back.
+	Tip string `json:"tip,omitempty"`
 	// Index is the 1-based stale number matching the interactive prompt.
 	Index         int     `json:"index,omitempty"`
 	Outcome       string  `json:"outcome,omitempty"`
@@ -112,6 +114,7 @@ func RenderJSON(w io.Writer, r Report) error {
 			Reason:      c.Reason,
 			Command:     c.ReclaimCmd,
 			UsedBy:      c.UsedBy,
+			Tip:         c.Tip,
 		}
 		p := c.Path
 		switch {

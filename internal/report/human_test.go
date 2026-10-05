@@ -221,3 +221,35 @@ func TestRenderColorOnlyAddsEscapes(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderTips(t *testing.T) {
+	snapTip := "snapd keeps old revisions. `sudo snap set system refresh.retain=2` keeps the fewest it allows."
+	journalTip := "To cap it, put\n  [Journal]\n  SystemMaxUse=500M\nin a drop-in."
+	manual := func(path, tip string) classify.Candidate {
+		return classify.Candidate{Category: classify.CategorySystem, Tier: classify.TierManual, Path: path, Size: 1, Reason: path, Tip: tip}
+	}
+	out := render(t, Report{Candidates: []classify.Candidate{
+		manual("a 1", snapTip), manual("b 2", snapTip), manual("journal", journalTip), manual("other", ""),
+	}})
+	tips := out[strings.Index(out, "Tips\n"):]
+
+	if n := strings.Count(out, "snapd keeps old revisions"); n != 1 {
+		t.Errorf("snap tip printed %d times, want once:\n%s", n, out)
+	}
+	// A tip's own lines keep their indentation under the bullet.
+	if !strings.Contains(tips, "\n      [Journal]\n      SystemMaxUse=500M\n    in a drop-in.") {
+		t.Errorf("journal tip lost its layout:\n%s", tips)
+	}
+	for _, l := range strings.Split(tips, "\n") {
+		if len([]rune(l)) > tipWidth+4 {
+			t.Errorf("tip line wider than %d: %q", tipWidth+4, l)
+		}
+	}
+	// A backquoted command is never split across lines.
+	if !strings.Contains(tips, "`sudo snap set system refresh.retain=2`") {
+		t.Errorf("command split by wrapping:\n%s", tips)
+	}
+	if strings.Contains(render(t, Report{Candidates: []classify.Candidate{manual("x", "")}}), "Tips") {
+		t.Error("Tips section without tips")
+	}
+}

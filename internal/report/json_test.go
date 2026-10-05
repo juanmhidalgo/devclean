@@ -45,7 +45,7 @@ func jsonFixture() Report {
 			{Category: classify.CategoryDocker, Tier: classify.TierStale, Path: "sha256:abcdef", Size: 50, Reason: "old image", LastUse: classify.LastUse{At: last, Source: classify.SignalImageLastSeen}},
 			{Category: classify.CategorySystem, Tier: classify.TierManual, Path: "snap old revisions", Size: 70, Reason: "manual", ReclaimCmd: "sudo snap remove x"},
 			{Category: classify.CategoryDocker, Tier: classify.TierGarbage, Path: "docker builder prune", Size: 9, Reason: "build cache", ReclaimCmd: "docker builder prune -f"},
-			{Category: classify.CategoryDocker, Tier: classify.TierManual, Path: "pgdata", Reason: "volumes may hold data", ReclaimCmd: "docker volume rm pgdata", SizeUnknown: true, UsedBy: []string{"db-1"}},
+			{Category: classify.CategoryDocker, Tier: classify.TierManual, Path: "pgdata", Reason: "volumes may hold data", ReclaimCmd: "docker volume rm pgdata", SizeUnknown: true, UsedBy: []string{"db-1"}, Tip: "keep it small"},
 		},
 		Skipped:  []collect.Skip{{Collector: "docker", Reason: "daemon unreachable"}},
 		Warnings: []string{"w1"},
@@ -108,6 +108,12 @@ func TestRenderJSON(t *testing.T) {
 		}
 		if u, _ := c4["used_by"].([]any); len(u) != 1 || u[0] != "db-1" {
 			t.Errorf("used_by = %v", c4["used_by"])
+		}
+		if c4["tip"] != "keep it small" {
+			t.Errorf("tip = %v", c4["tip"])
+		}
+		if _, ok := c3["tip"]; ok {
+			t.Errorf("candidate without a tip has tip: %v", c3)
 		}
 		if _, ok := c3["used_by"]; ok {
 			t.Errorf("non-volume has used_by: %v", c3)

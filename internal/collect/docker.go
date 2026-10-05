@@ -194,8 +194,12 @@ func (d *Docker) Collect(ctx context.Context) Result {
 		if u.links > 0 || len(usedBy[v.Name]) > 0 {
 			reason = ReasonUsedVolume
 		}
+		var tip string
+		if reason == ReasonUnusedVolume && IsAnonymousVolume(v.Name) {
+			tip = anonymousVolumeTip
+		}
 		res.Candidates = append(res.Candidates, classify.Candidate{
-			Category: classify.CategoryDocker, Tier: classify.TierManual, Path: v.Name, UsedBy: usedBy[v.Name],
+			Category: classify.CategoryDocker, Tier: classify.TierManual, Path: v.Name, UsedBy: usedBy[v.Name], Tip: tip,
 			Size: u.size, SizeUnknown: !u.measured, Reason: reason, ReclaimCmd: "docker volume rm " + v.Name,
 		})
 	}
@@ -272,6 +276,24 @@ func (d *Docker) labels(ctx context.Context, id string, res *Result) map[string]
 		return nil
 	}
 	return labels
+}
+
+// anonymousVolumeTip is attached to unused anonymous volumes.
+const anonymousVolumeTip = "Anonymous volumes outlive their containers. `docker run --rm` and " +
+	"`docker rm -v` remove a container's anonymous volumes with it."
+
+// IsAnonymousVolume reports whether name is the 64-hex name Docker gives a
+// volume nobody named.
+func IsAnonymousVolume(name string) bool {
+	if len(name) != 64 {
+		return false
+	}
+	for _, r := range name {
+		if !strings.ContainsRune("0123456789abcdef", r) {
+			return false
+		}
+	}
+	return true
 }
 
 // Volume reasons; the report keys its prune hint on ReasonUnusedVolume.

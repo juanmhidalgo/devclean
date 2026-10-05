@@ -41,6 +41,7 @@ EOF
 "volume ls") cat <<'EOF'
 {"Name":"vol1","Driver":"local"}
 {"Name":"vol2","Driver":"local"}
+{"Name":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","Driver":"local"}
 EOF
 ;;
 "system df") if [ "$3" = -v ]; then
@@ -85,6 +86,7 @@ func TestDockerCollector(t *testing.T) {
 			"docker builder prune": classify.TierGarbage,
 			"vol1":                 classify.TierManual,
 			"vol2":                 classify.TierManual,
+			"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef": classify.TierManual,
 		}
 		if len(got) != len(want) {
 			t.Errorf("candidates = %v, want paths %v", got, want)
@@ -94,6 +96,13 @@ func TestDockerCollector(t *testing.T) {
 			if !ok || c.Tier != tier || c.Category != classify.CategoryDocker {
 				t.Errorf("%s: got %+v, want tier %v", path, c, tier)
 			}
+		}
+		// Only an unused anonymous volume says how to avoid it.
+		if c := got["0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"]; c.Tip == "" {
+			t.Errorf("anonymous volume lacks a tip: %+v", c)
+		}
+		if got["vol1"].Tip != "" || got["vol2"].Tip != "" {
+			t.Errorf("named volumes have tips: %q, %q", got["vol1"].Tip, got["vol2"].Tip)
 		}
 		if c := got["vol1"]; c.ReclaimCmd != "docker volume rm vol1" || c.Size != 1_500_000_000 || c.SizeUnknown || c.Reason != ReasonUnusedVolume {
 			t.Errorf("vol1 = %+v", c)
@@ -156,7 +165,7 @@ func TestDockerCollector(t *testing.T) {
 				}
 			}
 		}
-		if vols != 2 || len(res.Skipped) != 0 || len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], "boom") {
+		if vols != 3 || len(res.Skipped) != 0 || len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], "boom") {
 			t.Errorf("vols = %d, skipped = %+v, warnings = %v", vols, res.Skipped, res.Warnings)
 		}
 	})

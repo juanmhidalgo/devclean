@@ -44,6 +44,33 @@ func TestLinuxSystemItems(t *testing.T) {
 		if got := items[2].Size; got != 1610612736 {
 			t.Errorf("journal size = %d, want 1610612736", got)
 		}
+		// One old revision per snap is already refresh.retain's minimum.
+		if items[0].Tip != "" || items[1].Tip != "" {
+			t.Errorf("snap tips = %q, %q, want none", items[0].Tip, items[1].Tip)
+		}
+		if !strings.Contains(items[2].Tip, "SystemMaxUse=500M") {
+			t.Errorf("journal tip = %q", items[2].Tip)
+		}
+	})
+
+	t.Run("two old revisions of a snap suggest refresh.retain", func(t *testing.T) {
+		testenv.FakeBin(t, "snap", `cat <<'OUT'
+Name    Version  Rev   Tracking       Publisher  Notes
+core20  1.0      1974  latest/stable  canonical  base
+core20  1.0      1891  latest/stable  canonical  base,disabled
+core20  1.0      1800  latest/stable  canonical  base,disabled
+firefox 120.0    3836  latest/stable  mozilla    disabled
+OUT`)
+		testenv.FakeBin(t, "journalctl", `echo "Archived and active journals take up 8.0M in the file systems."`)
+		items, _ := Linux{}.SystemItems(context.Background())
+		if len(items) != 3 {
+			t.Fatalf("items = %+v", items)
+		}
+		for _, it := range items {
+			if !strings.Contains(it.Tip, "refresh.retain=2") {
+				t.Errorf("%s tip = %q", it.Name, it.Tip)
+			}
+		}
 	})
 
 	t.Run("journal under target yields nothing", func(t *testing.T) {
