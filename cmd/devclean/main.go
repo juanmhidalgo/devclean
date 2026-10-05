@@ -49,33 +49,35 @@ func (a *app) execute(args []string) int {
 	return code
 }
 
-// newRootCmd builds the command tree. Running `devclean` bare is `devclean
-// report`. Each command stores its exit code in *code.
+// newRootCmd builds the command tree. Running `devclean` bare prints the
+// help. Each command stores its exit code in *code.
 func newRootCmd(a *app, code *int) *cobra.Command {
 	var opts runOptions
-	run := func(cmd *cobra.Command, _ []string) error {
-		*code = a.runReport(cmd.Context(), opts)
-		return nil
-	}
 	root := &cobra.Command{
 		Use:           "devclean",
 		Short:         "Report and reclaim disk space used by developer tooling",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          cobra.NoArgs,
-		RunE:          run,
+		RunE:          func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
 	}
 	pf := root.PersistentFlags()
 	pf.StringSliceVar(&opts.only, "only", nil, "limit to these categories (repeatable): "+strings.Join(collectorNames, ", "))
 	pf.StringSliceVar(&opts.tiers, "tier", nil, "limit to these tiers (repeatable): garbage, caches, stale, manual")
 	pf.StringSliceVar(&opts.roots, "root", nil, "scan this root instead of the configured ones (repeatable)")
 	pf.BoolVar(&opts.json, "json", false, "emit one JSON document")
-	root.AddCommand(&cobra.Command{
+	var summary bool
+	reportCmd := &cobra.Command{
 		Use:   "report",
 		Short: "Show what could be reclaimed; deletes nothing",
 		Args:  cobra.NoArgs,
-		RunE:  run,
-	})
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			*code = a.runReport(cmd.Context(), opts, summary)
+			return nil
+		},
+	}
+	reportCmd.Flags().BoolVar(&summary, "summary", false, "show only totals per tier and category")
+	root.AddCommand(reportCmd)
 	var co cleanOptions
 	clean := &cobra.Command{
 		Use:   "clean",

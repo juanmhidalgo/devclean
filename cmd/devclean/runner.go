@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -166,7 +167,10 @@ func (a *app) scan(ctx context.Context, opts runOptions) (*scan, int) {
 
 // runReport is the read-only default: it scans and renders, never deleting and
 // never saving history (observe and clean persist observations).
-func (a *app) runReport(ctx context.Context, opts runOptions) int {
+func (a *app) runReport(ctx context.Context, opts runOptions, summary bool) int {
+	if summary && opts.json {
+		return a.fatal(errors.New("--summary cannot be combined with --json"))
+	}
 	s, code := a.scan(ctx, opts)
 	if code != 0 {
 		return code
@@ -178,8 +182,11 @@ func (a *app) runReport(ctx context.Context, opts runOptions) int {
 		Now:        a.now(),
 	}
 	render := report.RenderHuman
-	if opts.json {
+	switch {
+	case opts.json:
 		render = report.RenderJSON
+	case summary:
+		render = report.RenderSummary
 	}
 	if err := render(a.stdout, r); err != nil {
 		return a.fatal(err)

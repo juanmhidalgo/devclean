@@ -77,6 +77,13 @@ func RenderHuman(w io.Writer, r Report) error {
 		}
 		ew.printf("\n")
 	}
+	writeTrailer(ew, r)
+	return ew.err
+}
+
+// writeTrailer writes the skipped collectors, warnings and notices that
+// follow the candidates in every human-readable rendering.
+func writeTrailer(ew *errWriter, r Report) {
 	if len(r.Skipped) > 0 {
 		ew.printf("Skipped collectors\n")
 		for _, s := range r.Skipped {
@@ -98,7 +105,6 @@ func RenderHuman(w io.Writer, r Report) error {
 		}
 		ew.printf("\n")
 	}
-	return ew.err
 }
 
 type errWriter struct {

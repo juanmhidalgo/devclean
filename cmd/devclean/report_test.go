@@ -88,23 +88,56 @@ func (e *reportEnv) run(args ...string) int {
 }
 
 func TestReportCommand(t *testing.T) {
-	t.Run("default and report are identical and delete nothing (AC-1)", func(t *testing.T) {
+	t.Run("bare devclean prints the help and scans nothing (AC-1)", func(t *testing.T) {
 		e := newReportEnv(t, fakePlatform{euid: 1000})
 		if code := e.run(); code != 0 {
-			t.Fatalf("default exit = %d, stderr %q", code, e.stderr.String())
+			t.Fatalf("exit = %d, stderr %q", code, e.stderr.String())
 		}
-		def := e.stdout.String()
-		if !strings.Contains(def, "/x/cache") {
-			t.Fatalf("output lacks candidate:\n%s", def)
+		out := e.stdout.String()
+		for _, want := range []string{"Usage:", "report", "clean", "observe", "schedule"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("help lacks %q:\n%s", want, out)
+			}
 		}
+		if len(e.calls) != 0 || len(e.deletes) != 0 {
+			t.Errorf("bare devclean ran collectors %v / deleted %v", e.calls, e.deletes)
+		}
+	})
+
+	t.Run("report deletes nothing (AC-1)", func(t *testing.T) {
+		e := newReportEnv(t, fakePlatform{euid: 1000})
 		if code := e.run("report"); code != 0 {
-			t.Fatalf("report exit = %d", code)
+			t.Fatalf("report exit = %d, stderr %q", code, e.stderr.String())
 		}
-		if def != e.stdout.String() {
-			t.Errorf("default and report differ:\n%s\n---\n%s", def, e.stdout.String())
+		if !strings.Contains(e.stdout.String(), "/x/cache") {
+			t.Fatalf("output lacks candidate:\n%s", e.stdout.String())
 		}
 		if len(e.deletes) != 0 {
 			t.Errorf("deleter called: %v", e.deletes)
+		}
+	})
+
+	t.Run("report --summary prints totals, not items", func(t *testing.T) {
+		e := newReportEnv(t, fakePlatform{euid: 1000})
+		if code := e.run("report", "--summary"); code != 0 {
+			t.Fatalf("exit = %d, stderr %q", code, e.stderr.String())
+		}
+		out := e.stdout.String()
+		if !strings.Contains(out, "Reclaimable") || !strings.Contains(out, "By category") {
+			t.Errorf("summary lacks totals:\n%s", out)
+		}
+		if strings.Contains(out, "/x/cache") {
+			t.Errorf("summary lists items:\n%s", out)
+		}
+	})
+
+	t.Run("report --summary with --json exits 1 before collecting", func(t *testing.T) {
+		e := newReportEnv(t, fakePlatform{euid: 1000})
+		if code := e.run("report", "--summary", "--json"); code != 1 {
+			t.Errorf("exit = %d, want 1", code)
+		}
+		if !strings.Contains(e.stderr.String(), "--summary") || len(e.calls) != 0 {
+			t.Errorf("stderr %q, calls %v", e.stderr.String(), e.calls)
 		}
 	})
 
@@ -124,9 +157,9 @@ func TestReportCommand(t *testing.T) {
 		if want := []string{"docker", "venvs", "system"}; !reflect.DeepEqual(e.calls, want) {
 			t.Errorf("calls = %v, want %v", e.calls, want)
 		}
-		e.run("--only", "watch")
+		e.run("report", "--only", "watch")
 		if want := []string{"watch"}; !reflect.DeepEqual(e.calls, want) {
-			t.Errorf("default cmd calls = %v, want %v", e.calls, want)
+			t.Errorf("single --only calls = %v, want %v", e.calls, want)
 		}
 	})
 
@@ -259,9 +292,9 @@ func TestTierFilter(t *testing.T) {
 		}
 	})
 
-	t.Run("comma list and root default command work (AC-5)", func(t *testing.T) {
+	t.Run("comma list works (AC-5)", func(t *testing.T) {
 		e := tierEnv(t)
-		if code := e.run("--tier", "garbage,caches"); code != 0 {
+		if code := e.run("report", "--tier", "garbage,caches"); code != 0 {
 			t.Fatalf("exit = %d", code)
 		}
 		out := e.stdout.String()

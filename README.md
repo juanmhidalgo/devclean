@@ -9,13 +9,16 @@ A single Go binary. **Status: v1 implemented on Linux; macOS is unsupported.**
 ## Usage
 
 ```
-devclean [report]                 # show what could be reclaimed; deletes nothing
+devclean                          # show this help
+devclean report [--summary]       # show what could be reclaimed; deletes nothing
 devclean clean [--dry-run] [--yes] [--quiet]
 devclean observe                  # record usage observations; deletes nothing
 devclean schedule install [--report-only]
 devclean schedule uninstall
 ```
 
+- `report --summary` shows only the totals per tier and per category, without
+  the item list (not combinable with `--json`).
 - `clean` deletes garbage and pressure-driven caches; stale items are deleted
   only when chosen (or with `--yes`). `--dry-run` prints what it would delete
   and records nothing; `--quiet` notifies only when something needs attention.
