@@ -31,17 +31,21 @@ type jsonSkip struct {
 // jsonCandidate: exactly one of path, image_id, volume, action is set. last_used and
 // last_used_source are null when there is no use evidence.
 type jsonCandidate struct {
-	Category       string  `json:"category"`
-	Tier           string  `json:"tier"`
-	Path           *string `json:"path,omitempty"`
-	ImageID        *string `json:"image_id,omitempty"`
-	Action         *string `json:"action,omitempty"`
-	Volume         *string `json:"volume,omitempty"`
-	SizeBytes      int64   `json:"size_bytes"`
+	Category  string  `json:"category"`
+	Tier      string  `json:"tier"`
+	Path      *string `json:"path,omitempty"`
+	ImageID   *string `json:"image_id,omitempty"`
+	Action    *string `json:"action,omitempty"`
+	Volume    *string `json:"volume,omitempty"`
+	SizeBytes int64   `json:"size_bytes"`
+	// SizeUnknown: size_bytes is 0 because the size was not measured.
+	SizeUnknown    bool    `json:"size_unknown,omitempty"`
 	LastUsed       *string `json:"last_used"`
 	LastUsedSource *string `json:"last_used_source"`
 	Reason         string  `json:"reason"`
 	Command        string  `json:"command,omitempty"`
+	// UsedBy: the containers that must be removed before the volume can be.
+	UsedBy []string `json:"used_by,omitempty"`
 	// Index is the 1-based stale number matching the interactive prompt.
 	Index         int     `json:"index,omitempty"`
 	Outcome       string  `json:"outcome,omitempty"`
@@ -101,17 +105,19 @@ func RenderJSON(w io.Writer, r Report) error {
 	stale := 0
 	for _, c := range r.Candidates {
 		jc := jsonCandidate{
-			Category:  categoryNames[c.Category],
-			Tier:      tierNames[c.Tier],
-			SizeBytes: c.Size,
-			Reason:    c.Reason,
-			Command:   c.ReclaimCmd,
+			Category:    categoryNames[c.Category],
+			Tier:        tierNames[c.Tier],
+			SizeBytes:   c.Size,
+			SizeUnknown: c.SizeUnknown,
+			Reason:      c.Reason,
+			Command:     c.ReclaimCmd,
+			UsedBy:      c.UsedBy,
 		}
 		p := c.Path
 		switch {
 		case c.Category == classify.CategoryDocker && strings.HasPrefix(p, "sha256:"):
 			jc.ImageID = &p
-		case c.Category == classify.CategoryDocker && c.ReclaimCmd == "docker volume rm "+p:
+		case isVolume(c):
 			jc.Volume = &p
 		case !strings.HasPrefix(p, "/"):
 			jc.Action = &p

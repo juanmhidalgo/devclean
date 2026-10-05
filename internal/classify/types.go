@@ -84,7 +84,13 @@ type Candidate struct {
 	// Refs are a docker image's repo:tag references. An image with several
 	// tags cannot be removed by ID without force, so it is removed by these.
 	Refs []string
+	// UsedBy are the containers, running or not, that mount a docker
+	// volume. Docker refuses to remove the volume until they are removed.
+	UsedBy []string
 	Size int64
+	// SizeUnknown means Size was not measured (a tool-native prune, or a
+	// volume docker did not size): 0 then does not mean empty.
+	SizeUnknown bool
 	// FSID identifies the filesystem the item lives on, to match FSStats.
 	FSID    string
 	Reason  string

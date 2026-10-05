@@ -45,7 +45,7 @@ func jsonFixture() Report {
 			{Category: classify.CategoryDocker, Tier: classify.TierStale, Path: "sha256:abcdef", Size: 50, Reason: "old image", LastUse: classify.LastUse{At: last, Source: classify.SignalImageLastSeen}},
 			{Category: classify.CategorySystem, Tier: classify.TierManual, Path: "snap old revisions", Size: 70, Reason: "manual", ReclaimCmd: "sudo snap remove x"},
 			{Category: classify.CategoryDocker, Tier: classify.TierGarbage, Path: "docker builder prune", Size: 9, Reason: "build cache", ReclaimCmd: "docker builder prune -f"},
-			{Category: classify.CategoryDocker, Tier: classify.TierManual, Path: "pgdata", Reason: "volumes may hold data", ReclaimCmd: "docker volume rm pgdata"},
+			{Category: classify.CategoryDocker, Tier: classify.TierManual, Path: "pgdata", Reason: "volumes may hold data", ReclaimCmd: "docker volume rm pgdata", SizeUnknown: true, UsedBy: []string{"db-1"}},
 		},
 		Skipped:  []collect.Skip{{Collector: "docker", Reason: "daemon unreachable"}},
 		Warnings: []string{"w1"},
@@ -105,6 +105,18 @@ func TestRenderJSON(t *testing.T) {
 		}
 		if _, ok := c4["action"]; ok {
 			t.Error("volume candidate must not have action")
+		}
+		if u, _ := c4["used_by"].([]any); len(u) != 1 || u[0] != "db-1" {
+			t.Errorf("used_by = %v", c4["used_by"])
+		}
+		if _, ok := c3["used_by"]; ok {
+			t.Errorf("non-volume has used_by: %v", c3)
+		}
+		if c4["size_unknown"] != true {
+			t.Errorf("unmeasured candidate lacks size_unknown: %v", c4)
+		}
+		if _, ok := c3["size_unknown"]; ok {
+			t.Errorf("measured candidate has size_unknown: %v", c3)
 		}
 		sk := doc["skipped"].([]any)[0].(map[string]any)
 		if sk["collector"] != "docker" || sk["reason"] != "daemon unreachable" {

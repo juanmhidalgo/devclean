@@ -25,6 +25,8 @@ type runOptions struct {
 	roots []string
 	tiers []string
 	json  bool
+	// color is --color: auto, always or never.
+	color string
 	// choose, when set, picks the collectors once config and history are
 	// loaded, overriding only.
 	choose func(config.Config, history.History) []string
@@ -32,6 +34,8 @@ type runOptions struct {
 
 // scan is everything one run gathered, merged across collectors.
 type scan struct {
+	home         string
+	color        bool
 	cfg          config.Config
 	hist         history.History
 	candidates   []classify.Candidate
@@ -97,6 +101,21 @@ func filterTiers(cands []classify.Candidate, keep map[classify.Tier]bool) []clas
 	return out
 }
 
+// colorEnabled resolves --color. auto colors only a terminal stdout, and
+// honors NO_COLOR (https://no-color.org) and TERM=dumb.
+func (a *app) colorEnabled(mode string) (bool, error) {
+	switch mode {
+	case "always":
+		return true, nil
+	case "never":
+		return false, nil
+	case "", "auto":
+		return os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb" &&
+			a.stdoutIsTTY != nil && a.stdoutIsTTY(), nil
+	}
+	return false, fmt.Errorf("invalid --color %q: want auto, always or never", mode)
+}
+
 // loadConfig reads the user's config file, applying defaults.
 func (a *app) loadConfig() (config.Config, error) {
 	home, err := os.UserHomeDir()
@@ -117,6 +136,10 @@ func (a *app) scan(ctx context.Context, opts runOptions) (*scan, int) {
 	if err := validateOnly(opts.only); err != nil {
 		return nil, a.fatal(err)
 	}
+	color, err := a.colorEnabled(opts.color)
+	if err != nil {
+		return nil, a.fatal(err)
+	}
 	keep, err := parseTiers(opts.tiers)
 	if err != nil {
 		return nil, a.fatal(err)
@@ -125,11 +148,11 @@ func (a *app) scan(ctx context.Context, opts runOptions) (*scan, int) {
 	if err != nil {
 		return nil, a.fatal(err)
 	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, a.fatal(err)
+	}
 	if len(opts.roots) > 0 {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, a.fatal(err)
-		}
 		cwd, err := os.Getwd()
 		if err != nil {
 			return nil, a.fatal(err)
@@ -140,7 +163,7 @@ func (a *app) scan(ctx context.Context, opts runOptions) (*scan, int) {
 	if err != nil {
 		return nil, a.fatal(err)
 	}
-	s := &scan{cfg: cfg, hist: hist, revalidators: map[string]func(context.Context) classify.Decision{}}
+	s := &scan{home: home, color: color, cfg: cfg, hist: hist, revalidators: map[string]func(context.Context) classify.Decision{}}
 	if warn != "" {
 		s.warnings = append(s.warnings, warn)
 	}
@@ -180,6 +203,8 @@ func (a *app) runReport(ctx context.Context, opts runOptions, summary bool) int 
 		Skipped:    s.skipped,
 		Warnings:   s.warnings,
 		Now:        a.now(),
+		Home:       s.home,
+		Color:      s.color,
 	}
 	render := report.RenderHuman
 	switch {

@@ -25,7 +25,9 @@ type app struct {
 	stdout   io.Writer
 	stderr   io.Writer
 	isTTY    func() bool
-	now      func() time.Time
+	// stdoutIsTTY decides --color=auto; nil means not a terminal.
+	stdoutIsTTY func() bool
+	now         func() time.Time
 	// newCollectors builds the six collectors for one run.
 	newCollectors func(cfg config.Config, hist history.History) []collect.Collector
 	// newExecutor builds the deleting executor for clean; nil means the real
@@ -66,6 +68,7 @@ func newRootCmd(a *app, code *int) *cobra.Command {
 	pf.StringSliceVar(&opts.tiers, "tier", nil, "limit to these tiers (repeatable): garbage, caches, stale, manual")
 	pf.StringSliceVar(&opts.roots, "root", nil, "scan this root instead of the configured ones (repeatable)")
 	pf.BoolVar(&opts.json, "json", false, "emit one JSON document")
+	pf.StringVar(&opts.color, "color", "auto", "color the output: auto, always or never")
 	var summary bool
 	reportCmd := &cobra.Command{
 		Use:   "report",
@@ -113,6 +116,7 @@ func main() {
 		platform:      plat,
 		stdin:         os.Stdin,
 		isTTY:         stdinIsTTY,
+		stdoutIsTTY:   func() bool { return isCharDevice(os.Stdout) },
 		stdout:        os.Stdout,
 		stderr:        os.Stderr,
 		now:           time.Now,
@@ -121,8 +125,11 @@ func main() {
 	os.Exit(a.execute(os.Args[1:]))
 }
 
-// stdinIsTTY reports whether stdin is a character device (a terminal).
-func stdinIsTTY() bool {
-	st, err := os.Stdin.Stat()
+// stdinIsTTY reports whether stdin is a terminal.
+func stdinIsTTY() bool { return isCharDevice(os.Stdin) }
+
+// isCharDevice reports whether f is a character device (a terminal).
+func isCharDevice(f *os.File) bool {
+	st, err := f.Stat()
 	return err == nil && st.Mode()&os.ModeCharDevice != 0
 }

@@ -131,6 +131,40 @@ func TestReportCommand(t *testing.T) {
 		}
 	})
 
+	t.Run("--color decides escapes", func(t *testing.T) {
+		tty := func() bool { return true }
+		for _, tc := range []struct {
+			name    string
+			args    []string
+			tty     func() bool
+			noColor string
+			want    bool
+		}{
+			{"auto on a pipe", nil, nil, "", false},
+			{"auto on a terminal", nil, tty, "", true},
+			{"auto honors NO_COLOR", nil, tty, "1", false},
+			{"always on a pipe", []string{"--color", "always"}, nil, "", true},
+			{"never on a terminal", []string{"--color", "never"}, tty, "", false},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Setenv("NO_COLOR", tc.noColor)
+				t.Setenv("TERM", "xterm")
+				e := newReportEnv(t, fakePlatform{euid: 1000})
+				e.a.stdoutIsTTY = tc.tty
+				if code := e.run(append([]string{"report"}, tc.args...)...); code != 0 {
+					t.Fatalf("exit = %d, stderr %q", code, e.stderr.String())
+				}
+				if got := strings.Contains(e.stdout.String(), "\x1b["); got != tc.want {
+					t.Errorf("escapes = %v, want %v:\n%q", got, tc.want, e.stdout.String())
+				}
+			})
+		}
+		e := newReportEnv(t, fakePlatform{euid: 1000})
+		if code := e.run("report", "--color", "sometimes"); code != 1 || len(e.calls) != 0 {
+			t.Errorf("invalid --color: exit = %d, calls %v", code, e.calls)
+		}
+	})
+
 	t.Run("report --summary with --json exits 1 before collecting", func(t *testing.T) {
 		e := newReportEnv(t, fakePlatform{euid: 1000})
 		if code := e.run("report", "--summary", "--json"); code != 1 {

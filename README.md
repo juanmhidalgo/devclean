@@ -24,8 +24,15 @@ devclean schedule uninstall
   and records nothing; `--quiet` notifies only when something needs attention.
 - Global flags: `--only` (categories: projects, docker, venvs, caches, system,
   watch), `--tier` (garbage, caches, stale, manual), `--root` (scan this root
-  instead of the configured ones) and `--json` (one JSON document). `--only`,
-  `--tier` and `--root` are repeatable.
+  instead of the configured ones), `--json` (one JSON document) and `--color`
+  (`auto`, `always` or `never`; `auto` colors only a terminal and honors
+  `NO_COLOR`). `--only`, `--tier` and `--root` are repeatable.
+- The report groups items that share a reason, lists the largest first and
+  shows manual items as the command to run; a Docker volume that containers
+  still mount shows those containers instead (`used_by` in JSON), since docker
+  refuses to remove it. Sizes devclean cannot measure (a
+  tool-native prune, a volume docker does not size) show as `-`, and as
+  `"size_unknown": true` in JSON.
 - `schedule install` schedules `observe` hourly and `clean` on the configured
   cadence; `--report-only` schedules `report` instead (trial mode).
 - Config lives at `$XDG_CONFIG_HOME/devclean/config.toml`.

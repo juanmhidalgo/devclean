@@ -97,7 +97,7 @@ func (c *Caches) Collect(ctx context.Context) Result {
 		case err == nil:
 			res.Candidates = append(res.Candidates, classify.Candidate{
 				Category: classify.CategoryCaches, Tier: classify.TierGarbage, Path: t.action,
-				Reason: "tool-native prune", ReclaimCmd: t.action,
+				Reason: "tool-native prune", ReclaimCmd: t.action, SizeUnknown: true,
 			})
 		case errors.As(err, &exit):
 			msg := string(bytes.TrimSpace(out))

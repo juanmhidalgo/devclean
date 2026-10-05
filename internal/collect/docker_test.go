@@ -3,6 +3,7 @@ package collect
 import (
 	"context"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -33,8 +34,8 @@ EOF
   *) echo null;;
 esac;;
 "ps -a") cat <<'EOF'
-{"ID":"c1","Image":"web:1","State":"running"}
-{"ID":"c2","Image":"ggg","State":"exited"}
+{"ID":"c1","Image":"web:1","State":"running","Names":"web-1","Mounts":"vol2,/home/x/src"}
+{"ID":"c2","Image":"ggg","State":"exited","Names":"old-1","Mounts":"vol2"}
 EOF
 ;;
 "volume ls") cat <<'EOF'
@@ -42,7 +43,11 @@ EOF
 {"Name":"vol2","Driver":"local"}
 EOF
 ;;
-"system df") cat <<'EOF'
+"system df") if [ "$3" = -v ]; then
+  echo '[{"Name":"vol1","Size":"1.5GB","Links":"0"},{"Name":"vol2","Size":"N/A","Links":"2"}]'
+  exit 0
+fi
+cat <<'EOF'
 {"Type":"Images","Reclaimable":"1GB (10%)"}
 {"Type":"Build Cache","Reclaimable":"2.5GB (100%)"}
 EOF
@@ -90,8 +95,12 @@ func TestDockerCollector(t *testing.T) {
 				t.Errorf("%s: got %+v, want tier %v", path, c, tier)
 			}
 		}
-		if c := got["vol1"]; c.ReclaimCmd != "docker volume rm vol1" {
-			t.Errorf("vol1 ReclaimCmd = %q", c.ReclaimCmd)
+		if c := got["vol1"]; c.ReclaimCmd != "docker volume rm vol1" || c.Size != 1_500_000_000 || c.SizeUnknown || c.Reason != ReasonUnusedVolume {
+			t.Errorf("vol1 = %+v", c)
+		}
+		// N/A is not measured; the size is unknown, not zero bytes.
+		if c := got["vol2"]; c.Size != 0 || !c.SizeUnknown || c.Reason != ReasonUsedVolume || !reflect.DeepEqual(c.UsedBy, []string{"web-1", "old-1"}) {
+			t.Errorf("vol2 = %+v", c)
 		}
 		if c := got["docker builder prune"]; c.ReclaimCmd != "docker builder prune -f" || c.Size != 2_500_000_000 {
 			t.Errorf("builder prune = %+v", c)
@@ -131,6 +140,24 @@ func TestDockerCollector(t *testing.T) {
 			if c.Tier == classify.TierStale {
 				t.Errorf("stale candidate without history: %+v", c)
 			}
+		}
+	})
+
+	t.Run("volumes stay listed when they cannot be measured", func(t *testing.T) {
+		failing := strings.Replace(fakeDockerScript, `echo '[{"Name"`, `echo boom >&2; exit 1; echo '[{"Name"`, 1)
+		testenv.FakeBin(t, "docker", failing)
+		res := newDocker(history.History{}).Collect(context.Background())
+		var vols int
+		for _, c := range res.Candidates {
+			if c.ReclaimCmd == "docker volume rm "+c.Path {
+				vols++
+				if !c.SizeUnknown {
+					t.Errorf("%s measured without df -v: %+v", c.Path, c)
+				}
+			}
+		}
+		if vols != 2 || len(res.Skipped) != 0 || len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], "boom") {
+			t.Errorf("vols = %d, skipped = %+v, warnings = %v", vols, res.Skipped, res.Warnings)
 		}
 	})
 

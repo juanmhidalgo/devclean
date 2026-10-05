@@ -81,7 +81,7 @@ func (a *app) runClean(ctx context.Context, opts cleanOptions) int {
 			nStale++
 		}
 	}
-	base := report.Report{Candidates: s.candidates, Skipped: s.skipped, Warnings: s.warnings, Now: a.now()}
+	base := report.Report{Candidates: s.candidates, Skipped: s.skipped, Warnings: s.warnings, Now: a.now(), Home: s.home, Color: s.color}
 	var selection []int
 	shown := false
 	if tty && !opts.yes && nStale > 0 {

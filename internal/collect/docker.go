@@ -27,8 +27,8 @@ const builderPrunePath = "docker builder prune"
 // Docker collects unused Docker images, build cache and volumes.
 //
 // It reads `docker image ls`, `docker ps -a`, `docker volume ls` and
-// `docker system df` as `--format '{{json .}}'`, plus `docker image inspect`
-// per image for labels. It never reads CreatedAt: age is judged from history.
+// `docker system df` as `--format '{{json .}}'`, `docker system df -v` for
+// volume sizes, plus `docker image inspect` per image for labels. It never reads CreatedAt: age is judged from history.
 //
 // Observation shape (for the history writer): an image with a container yields
 // {Key: "docker:<id>", At: now}; an unused image with no history entry yields
@@ -112,10 +112,20 @@ func (d *Docker) Collect(ctx context.Context) Result {
 	}
 	images := groupImages(rows)
 	var containers []struct {
-		Image string `json:"Image"`
+		Image  string `json:"Image"`
+		Names  string `json:"Names"`
+		Mounts string `json:"Mounts"` // comma-separated volume names and bind paths
 	}
 	if err := dockerJSON(ctx, &containers, "ps", "-a", "--no-trunc", "--format", "{{json .}}"); err != nil {
 		return skip(err.Error())
+	}
+	usedBy := map[string][]string{}
+	for _, c := range containers {
+		for _, m := range strings.Split(c.Mounts, ",") {
+			if m != "" {
+				usedBy[m] = append(usedBy[m], c.Names)
+			}
+		}
 	}
 	var volumes []struct {
 		Name string `json:"Name"`
@@ -174,10 +184,19 @@ func (d *Docker) Collect(ctx context.Context) Result {
 			Size: size, Reason: "reclaimable build cache", ReclaimCmd: "docker builder prune -f",
 		})
 	}
+	usage, err := volumeUsage(ctx)
+	if err != nil {
+		res.Warnings = append(res.Warnings, "docker: cannot measure volumes: "+err.Error())
+	}
 	for _, v := range volumes {
+		u := usage[v.Name]
+		reason := ReasonUnusedVolume
+		if u.links > 0 || len(usedBy[v.Name]) > 0 {
+			reason = ReasonUsedVolume
+		}
 		res.Candidates = append(res.Candidates, classify.Candidate{
-			Category: classify.CategoryDocker, Tier: classify.TierManual, Path: v.Name,
-			Reason: "volumes may hold data; review before removing", ReclaimCmd: "docker volume rm " + v.Name,
+			Category: classify.CategoryDocker, Tier: classify.TierManual, Path: v.Name, UsedBy: usedBy[v.Name],
+			Size: u.size, SizeUnknown: !u.measured, Reason: reason, ReclaimCmd: "docker volume rm " + v.Name,
 		})
 	}
 	res.Coverage = []history.Coverage{cov}
@@ -253,6 +272,45 @@ func (d *Docker) labels(ctx context.Context, id string, res *Result) map[string]
 		return nil
 	}
 	return labels
+}
+
+// Volume reasons; the report keys its prune hint on ReasonUnusedVolume.
+const (
+	ReasonUnusedVolume = "unused volume; may hold data, review before removing"
+	ReasonUsedVolume   = "volume used by a container"
+)
+
+type volumeStat struct {
+	size     int64
+	measured bool // false when docker reports no size ("N/A")
+	links    int  // containers, running or not, that mount the volume
+}
+
+// volumeUsage reads each volume's size and container count from
+// `docker system df -v`, which measures the volumes and is slower than the
+// other listings. A volume it does not size ("N/A", e.g. a non-local driver)
+// is not measured.
+func volumeUsage(ctx context.Context) (map[string]volumeStat, error) {
+	var lists [][]struct {
+		Name  string `json:"Name"`
+		Size  string `json:"Size"`
+		Links string `json:"Links"`
+	}
+	if err := dockerJSON(ctx, &lists, "system", "df", "-v", "--format", "{{json .Volumes}}"); err != nil {
+		return nil, err
+	}
+	out := map[string]volumeStat{}
+	for _, l := range lists {
+		for _, v := range l {
+			links, _ := strconv.Atoi(v.Links)
+			st := volumeStat{measured: strings.HasSuffix(v.Size, "B"), links: links}
+			if st.measured {
+				st.size = parseDockerSize(v.Size)
+			}
+			out[v.Name] = st
+		}
+	}
+	return out, nil
 }
 
 // buildCacheReclaimable reads the Build Cache row of `docker system df`.
