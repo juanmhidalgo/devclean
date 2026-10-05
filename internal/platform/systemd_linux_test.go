@@ -107,7 +107,9 @@ func TestLinuxScheduleUnits(t *testing.T) {
 		if err := l.InstallSchedule(spec); err != nil {
 			t.Fatal(err)
 		}
-		os.Remove(log)
+		if err := os.Remove(log); err != nil {
+			t.Fatal(err)
+		}
 		if err := l.UninstallSchedule(); err != nil {
 			t.Fatal(err)
 		}

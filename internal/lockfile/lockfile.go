@@ -26,7 +26,7 @@ func Lock(path string) (unlock func() error, err error) {
 		}
 	}
 	if err != nil {
-		f.Close()
+		_ = f.Close() // the flock error is the one to report
 		return nil, err
 	}
 	return func() error {
@@ -55,7 +55,7 @@ func TryLock(path string) (unlock func() error, err error) {
 		}
 	}
 	if err != nil {
-		f.Close()
+		_ = f.Close() // the flock error is the one to report
 		if err == syscall.EWOULDBLOCK {
 			return nil, ErrLocked
 		}

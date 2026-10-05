@@ -18,7 +18,7 @@ func TestTryLockHeld(t *testing.T) {
 			if err != nil {
 				t.Fatalf("first TryLock: %v", err)
 			}
-			defer unlock()
+			defer func() { _ = unlock() }()
 			if _, err := TryLock(path); !errors.Is(err, ErrLocked) {
 				t.Fatalf("second TryLock err = %v, want ErrLocked", err)
 			}
@@ -36,19 +36,23 @@ func TestTryLockHeld(t *testing.T) {
 			if err != nil {
 				t.Fatalf("TryLock after release: %v", err)
 			}
-			unlock2()
+			if err := unlock2(); err != nil {
+				t.Fatalf("unlock: %v", err)
+			}
 		}},
 		{"history lock does not block clean lock", func(t *testing.T, dir string) {
 			hist, err := Lock(filepath.Join(dir, "history.json.lock"))
 			if err != nil {
 				t.Fatalf("history Lock: %v", err)
 			}
-			defer hist()
+			defer func() { _ = hist() }()
 			unlock, err := TryLock(filepath.Join(dir, "clean.lock"))
 			if err != nil {
 				t.Fatalf("TryLock with history held: %v", err)
 			}
-			unlock()
+			if err := unlock(); err != nil {
+				t.Fatalf("unlock: %v", err)
+			}
 		}},
 	}
 	for _, tt := range tests {

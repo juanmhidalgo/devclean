@@ -61,7 +61,7 @@ func (Linux) MountFor(path string) (Mount, error) {
 	if err != nil {
 		return Mount{}, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // read-only
 	mounts, err := ParseMountinfo(f)
 	if err != nil {
 		return Mount{}, err

@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/juanmhidalgo/devclean/internal/platform"
 )
@@ -12,14 +11,14 @@ import (
 func (a *app) preflight() int {
 	if err := a.platform.Supported(); err != nil {
 		if errors.Is(err, platform.ErrUnsupported) {
-			fmt.Fprintln(a.stderr, "devclean: unsupported platform")
+			a.stderrf("devclean: unsupported platform\n")
 		} else {
-			fmt.Fprintln(a.stderr, "devclean: unsupported platform:", err)
+			a.stderrf("devclean: unsupported platform: %v\n", err)
 		}
 		return 1
 	}
 	if a.platform.Euid() == 0 {
-		fmt.Fprintln(a.stderr, "devclean: refusing to run as root")
+		a.stderrf("devclean: refusing to run as root\n")
 		return 1
 	}
 	return 0

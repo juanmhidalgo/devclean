@@ -48,8 +48,19 @@ type scan struct {
 
 // fatal prints the error and returns the exit code 1.
 func (a *app) fatal(err error) int {
-	fmt.Fprintln(a.stderr, "devclean:", err)
+	a.stderrf("devclean: %v\n", err)
 	return 1
+}
+
+// stdoutf writes to stdout. A failed write to the terminal has nowhere to be
+// reported, so its error is dropped here instead of at every call site.
+func (a *app) stdoutf(format string, args ...any) {
+	_, _ = fmt.Fprintf(a.stdout, format, args...)
+}
+
+// stderrf writes to stderr; see stdoutf.
+func (a *app) stderrf(format string, args ...any) {
+	_, _ = fmt.Fprintf(a.stderr, format, args...)
 }
 
 // validateOnly rejects names that are not collectors.

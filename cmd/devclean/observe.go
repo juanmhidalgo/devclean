@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"time"
 
@@ -54,8 +53,8 @@ func (a *app) runObserve(ctx context.Context, opts runOptions) int {
 		s.warnings = append(s.warnings, hw)
 	}
 	for _, w := range s.warnings {
-		fmt.Fprintln(a.stderr, "devclean: warning:", w)
+		a.stderrf("devclean: warning: %s\n", w)
 	}
-	fmt.Fprintf(a.stdout, "Recorded %d observations.\n", len(s.observations))
+	a.stdoutf("Recorded %d observations.\n", len(s.observations))
 	return exitCode(runOutcome{SkippedCollectors: len(s.skipped)})
 }

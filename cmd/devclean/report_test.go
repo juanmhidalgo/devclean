@@ -43,6 +43,22 @@ type reportEnv struct {
 	cfgDir  string
 }
 
+// writeTestFile writes data to path, creating its parent directories.
+func writeTestFile(t *testing.T, path, data string) {
+	t.Helper()
+	mkdirAll(t, filepath.Dir(path))
+	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mkdirAll(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func newReportEnv(t *testing.T, plat fakePlatform) *reportEnv {
 	t.Helper()
 	state, cfg := testenv.Isolate(t)
@@ -209,8 +225,7 @@ func TestReportCommand(t *testing.T) {
 
 	t.Run("pin: --root replaces configured scan roots", func(t *testing.T) {
 		e := newReportEnv(t, fakePlatform{euid: 1000})
-		os.MkdirAll(e.cfgDir, 0o755)
-		os.WriteFile(filepath.Join(e.cfgDir, "config.toml"), []byte("[scan]\nroots = [\"/configured\"]\n"), 0o644)
+		writeTestFile(t, filepath.Join(e.cfgDir, "config.toml"), "[scan]\nroots = [\"/configured\"]\n")
 		a, b := t.TempDir(), t.TempDir()
 		e.run("report", "--root", a, "--root", b)
 		e.run("report")
@@ -226,10 +241,9 @@ func TestReportCommand(t *testing.T) {
 		// MUTATION: see docs/mutation-checks.md (excludes vs relative roots).
 		e := newReportEnv(t, fakePlatform{euid: 1000})
 		home := os.Getenv("HOME")
-		os.MkdirAll(e.cfgDir, 0o755)
-		os.WriteFile(filepath.Join(e.cfgDir, "config.toml"), []byte("[scan]\nexcludes = [\"~/work/keep\", \"rel/keep\"]\n"), 0o644)
+		writeTestFile(t, filepath.Join(e.cfgDir, "config.toml"), "[scan]\nexcludes = [\"~/work/keep\", \"rel/keep\"]\n")
 		work := filepath.Join(home, "work")
-		os.MkdirAll(work, 0o755)
+		mkdirAll(t, work)
 		t.Chdir(work)
 		e.run("report", "--root", ".", "--root", "~/other")
 		got := e.cfgSeen[0].Scan
@@ -245,8 +259,7 @@ func TestReportCommand(t *testing.T) {
 
 	t.Run("pin: invalid config exits 1 before any collector", func(t *testing.T) {
 		e := newReportEnv(t, fakePlatform{euid: 1000})
-		os.MkdirAll(e.cfgDir, 0o755)
-		os.WriteFile(filepath.Join(e.cfgDir, "config.toml"), []byte("this is = = not toml\n"), 0o644)
+		writeTestFile(t, filepath.Join(e.cfgDir, "config.toml"), "this is = = not toml\n")
 		if code := e.run("report"); code != 1 {
 			t.Errorf("exit = %d, want 1", code)
 		}
@@ -260,8 +273,7 @@ func TestReportCommand(t *testing.T) {
 
 	t.Run("pin: preflight runs first", func(t *testing.T) {
 		e := newReportEnv(t, fakePlatform{euid: 0})
-		os.MkdirAll(e.cfgDir, 0o755)
-		os.WriteFile(filepath.Join(e.cfgDir, "config.toml"), []byte("garbage = = =\n"), 0o644)
+		writeTestFile(t, filepath.Join(e.cfgDir, "config.toml"), "garbage = = =\n")
 		if code := e.run("report"); code != 1 {
 			t.Errorf("exit = %d, want 1", code)
 		}

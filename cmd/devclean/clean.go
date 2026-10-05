@@ -44,13 +44,13 @@ func (a *app) runClean(ctx context.Context, opts cleanOptions) int {
 	if !opts.dryRun {
 		unlock, err := lockfile.TryLock(filepath.Join(stateDir, "clean.lock"))
 		if errors.Is(err, lockfile.ErrLocked) {
-			fmt.Fprintln(a.stderr, "devclean: another clean is running")
+			a.stderrf("devclean: another clean is running\n")
 			return 1
 		}
 		if err != nil {
 			return a.fatal(err)
 		}
-		defer unlock()
+		defer func() { _ = unlock() }()
 	}
 	s, code := a.scan(ctx, opts.runOptions)
 	if code != 0 {
@@ -117,7 +117,7 @@ func (a *app) runClean(ctx context.Context, opts cleanOptions) int {
 	var saveErr error
 	if hw, err := history.Save(filepath.Join(stateDir, "history.json"), applyObservations(s.hist, s.observations), a.now, s.coverage...); err != nil {
 		saveErr = fmt.Errorf("saving history: %w", err)
-		fmt.Fprintln(a.stderr, "devclean:", saveErr)
+		a.stderrf("devclean: %v\n", saveErr)
 		base.Warnings = append(base.Warnings, saveErr.Error())
 	} else if hw != "" {
 		base.Warnings = append(base.Warnings, hw)
@@ -139,13 +139,13 @@ func (a *app) runClean(ctx context.Context, opts cleanOptions) int {
 		return a.fatal(err)
 	}
 	if !opts.json {
-		fmt.Fprint(a.stdout, summary)
+		a.stdoutf("%s", summary)
 	}
 
 	out := runOutcome{Fatal: saveErr, SkippedCollectors: len(s.skipped), FailedDeletions: failed, AbovePressure: above}
 	if notify.ShouldNotify(out.summary(), opts.quiet) {
 		if err := notify.Send(ctx, s.cfg.NotifyCommand, summary); err != nil {
-			fmt.Fprintln(a.stderr, "devclean: notification failed:", err)
+			a.stderrf("devclean: notification failed: %v\n", err)
 			out.NotifyErr = err
 		}
 	}
@@ -167,9 +167,9 @@ func (a *app) renderDryRun(opts cleanOptions, r report.Report, plan classify.Pla
 			return a.fatal(err)
 		}
 	}
-	fmt.Fprintf(a.stdout, "Would delete (%d):\n", len(plan.Delete))
+	a.stdoutf("Would delete (%d):\n", len(plan.Delete))
 	for _, c := range plan.Delete {
-		fmt.Fprintf(a.stdout, "  %s\n", c.Path)
+		a.stdoutf("  %s\n", c.Path)
 	}
 	return exitCode(runOutcome{SkippedCollectors: skipped})
 }
@@ -194,17 +194,17 @@ func (a *app) askSelection(n int) []int {
 	}
 	in := bufio.NewReader(a.stdin)
 	for i := 0; i < maxPromptTries; i++ {
-		fmt.Fprint(a.stdout, "Delete which stale items? [all/none/1,3-5]: ")
+		a.stdoutf("Delete which stale items? [all/none/1,3-5]: ")
 		line, err := in.ReadString('\n')
 		if err != nil && (err != io.EOF || strings.TrimSpace(line) == "") {
-			fmt.Fprintln(a.stdout)
+			a.stdoutf("\n")
 			return nil
 		}
 		sel, perr := report.ParseSelection(line, n)
 		if perr == nil {
 			return sel
 		}
-		fmt.Fprintln(a.stderr, "devclean:", perr)
+		a.stderrf("devclean: %v\n", perr)
 	}
 	return nil
 }

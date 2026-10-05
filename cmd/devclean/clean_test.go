@@ -185,7 +185,7 @@ func TestCleanCommand(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer unlock()
+		defer func() { _ = unlock() }()
 		if code := e.run("clean", "--yes"); code != 1 {
 			t.Errorf("exit = %d, want 1", code)
 		}
@@ -200,9 +200,8 @@ func TestCleanCommand(t *testing.T) {
 	t.Run("history is saved with observations and pruned by coverage (AC-29)", func(t *testing.T) {
 		e := cleanEnv(t)
 		hp := filepath.Join(e.a.platform.StateDir(), "history.json")
-		os.MkdirAll(filepath.Dir(hp), 0o755)
 		seed := `{"version":1,"entries":{"projects:/p/gone":{"first_seen":"2025-01-01T00:00:00Z","last_used":"2025-01-01T00:00:00Z"}},"walked":{}}`
-		os.WriteFile(hp, []byte(seed), 0o600)
+		writeTestFile(t, hp, seed)
 		used := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 		inner := e.a.newCollectors
 		e.a.newCollectors = func(c config.Config, h history.History) []collect.Collector {
@@ -239,7 +238,7 @@ func TestCleanCommand(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer unlock()
+		defer func() { _ = unlock() }()
 		if code := e.run("clean", "--dry-run", "--yes"); code != 0 {
 			t.Fatalf("exit = %d, stderr %q", code, e.stderr.String())
 		}
@@ -251,8 +250,7 @@ func TestCleanCommand(t *testing.T) {
 	t.Run("notification failure turns the exit code into 2 (AC-39)", func(t *testing.T) {
 		e := cleanEnv(t)
 		testenv.FakeBin(t, "failnotify", "echo boom; exit 1")
-		os.MkdirAll(e.cfgDir, 0o755)
-		os.WriteFile(filepath.Join(e.cfgDir, "config.toml"), []byte("notify_command = \"failnotify\"\n"), 0o644)
+		writeTestFile(t, filepath.Join(e.cfgDir, "config.toml"), "notify_command = \"failnotify\"\n")
 		if code := e.run("clean", "--yes"); code != 2 {
 			t.Errorf("exit = %d, want 2", code)
 		}
@@ -265,8 +263,7 @@ func TestCleanCommand(t *testing.T) {
 		e := cleanEnv(t)
 		out := filepath.Join(t.TempDir(), "body")
 		testenv.FakeBin(t, "savenotify", "cat > "+out)
-		os.MkdirAll(e.cfgDir, 0o755)
-		os.WriteFile(filepath.Join(e.cfgDir, "config.toml"), []byte("notify_command = \"savenotify\"\n"), 0o644)
+		writeTestFile(t, filepath.Join(e.cfgDir, "config.toml"), "notify_command = \"savenotify\"\n")
 		e.a.platform = withStatfs(e.a.platform.(fakePlatform), func(string) platform.FSUsage {
 			return platform.FSUsage{ID: "fs1", Used: 10, Avail: 90}
 		})
@@ -283,7 +280,9 @@ func TestCleanCommand(t *testing.T) {
 		if err != nil || !strings.Contains(string(b), "Deleted 4") {
 			t.Errorf("body = %q (err %v)", b, err)
 		}
-		os.Remove(out)
+		if err := os.Remove(out); err != nil {
+			t.Fatal(err)
+		}
 		e.a.platform = withStatfs(e.a.platform.(fakePlatform), func(string) platform.FSUsage {
 			return platform.FSUsage{ID: "fs1", Used: 95, Avail: 5}
 		})
@@ -297,14 +296,13 @@ func TestCleanCommand(t *testing.T) {
 		e := cleanEnv(t)
 		out := filepath.Join(t.TempDir(), "body")
 		testenv.FakeBin(t, "savenotify", "cat > "+out)
-		os.MkdirAll(e.cfgDir, 0o755)
-		os.WriteFile(filepath.Join(e.cfgDir, "config.toml"), []byte("notify_command = \"savenotify\"\n"), 0o644)
+		writeTestFile(t, filepath.Join(e.cfgDir, "config.toml"), "notify_command = \"savenotify\"\n")
 		e.a.platform = withStatfs(e.a.platform.(fakePlatform), func(string) platform.FSUsage {
 			return platform.FSUsage{ID: "fs1", Used: 10, Avail: 90}
 		})
 		// A directory where the history lock file goes makes only the save
 		// fail; loading the history at the start of the run still works.
-		os.MkdirAll(filepath.Join(e.a.platform.StateDir(), "history.json.lock", "x"), 0o755)
+		mkdirAll(t, filepath.Join(e.a.platform.StateDir(), "history.json.lock", "x"))
 		if code := e.run("clean", "--yes", "--quiet"); code != 1 {
 			t.Errorf("exit = %d, want 1", code)
 		}
