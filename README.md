@@ -10,6 +10,7 @@ A single Go binary. **Status: v1 implemented on Linux; macOS is unsupported.**
 
 ```
 devclean                          # show this help
+devclean init [--yes] [--dry-run] [--force] [--notify-command CMD]
 devclean report [--summary] [--notify [--quiet]]  # show what could be reclaimed; deletes nothing
 devclean clean [--dry-run] [--yes] [--quiet]
 devclean observe                  # record usage observations; deletes nothing
@@ -17,6 +18,13 @@ devclean schedule install [--report-only]
 devclean schedule uninstall
 ```
 
+- `init` writes a first config: it finds the home directories holding git
+  repositories (scan roots) and large disk images (watch list), asks which to
+  keep and for a notification command (sending a test one), then offers to
+  schedule devclean in trial mode and to record a first observation. `--yes`
+  takes everything found without asking; `--dry-run` prints the config and
+  writes nothing; an existing config is replaced only with `--force` (kept as
+  `config.toml.bak`).
 - `report --summary` shows only the totals per tier and per category, without
   the item list (not combinable with `--json`). `report --notify` sends that
   summary, headed by the disk usage, to `notify_command`; with `--quiet` only

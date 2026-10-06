@@ -108,6 +108,7 @@ func newRootCmd(a *app, code *int) *cobra.Command {
 			return nil
 		},
 	})
+	root.AddCommand(a.newInitCmd(code))
 	root.AddCommand(a.newScheduleCmd(code))
 	return root
 }

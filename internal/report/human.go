@@ -112,8 +112,8 @@ func RenderHuman(w io.Writer, r Report) error {
 		ew.printf("\n")
 	}
 	if len(r.Candidates) > 0 {
-		ew.printf("%s%s\n\n", st.bold("Reclaimable (garbage+caches+stale)  "+formatSize(reclaimable)),
-			st.dim("   manual: "+formatSize(manual)))
+		ew.printf("%s%s\n\n", st.bold("Reclaimable (garbage+caches+stale)  "+FormatSize(reclaimable)),
+			st.dim("   manual: "+FormatSize(manual)))
 	}
 	writeTips(ew, st, r.Candidates)
 	writeTrailer(ew, r)
@@ -193,7 +193,7 @@ func (v view) writeGroup(ew *errWriter, g []item) {
 	}
 	size := "size not measured"
 	if !allUnmeasured(g) {
-		size = formatSize(groupSize(g))
+		size = FormatSize(groupSize(g))
 	}
 	ew.printf("  %s %s\n", v.st.bold(g[0].c.Reason), v.st.dim(fmt.Sprintf("— %d %s, %s", len(g), items(len(g)), size)))
 	sized := !allUnmeasured(g)
@@ -297,9 +297,9 @@ func tierTotal(g []item, total int64) string {
 	case unmeasured == len(g):
 		return fmt.Sprintf("%d %s, size not measured", len(g), items(len(g)))
 	case unmeasured > 0:
-		return fmt.Sprintf("%s in %d %s (%d not measured)", formatSize(total), len(g), items(len(g)), unmeasured)
+		return fmt.Sprintf("%s in %d %s (%d not measured)", FormatSize(total), len(g), items(len(g)), unmeasured)
 	}
-	return fmt.Sprintf("%s in %d %s", formatSize(total), len(g), items(len(g)))
+	return fmt.Sprintf("%s in %d %s", FormatSize(total), len(g), items(len(g)))
 }
 
 func groupSize(g []item) int64 {
@@ -314,7 +314,7 @@ func displaySize(c classify.Candidate) string {
 	if sizeUnmeasured(c) {
 		return "-"
 	}
-	return formatSize(c.Size)
+	return FormatSize(c.Size)
 }
 
 // isVolume reports whether c is a Docker volume; its Path is the volume name.
@@ -478,7 +478,8 @@ func formatLastUse(u classify.LastUse, now time.Time) string {
 	return s + ")"
 }
 
-func formatSize(n int64) string {
+// FormatSize renders a byte count with binary units, e.g. "1.5 GiB".
+func FormatSize(n int64) string {
 	const unit = 1024
 	if n < unit {
 		return fmt.Sprintf("%d B", n)
