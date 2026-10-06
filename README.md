@@ -4,7 +4,23 @@ Reclaim the disk that development work leaves behind — stale Docker images,
 `node_modules` and virtualenvs of projects you no longer use, orphaned
 environments and package caches — sorted by how much it costs to be wrong.
 
-A single Go binary. **Status: v1 implemented on Linux; macOS is unsupported.**
+A single Go binary for Linux; macOS is unsupported.
+
+**Status: early.** Everything in v1 is implemented and runs on the author's
+machine in trial mode (scheduled reports, garbage-only cleaning). Deleting
+stale items has not been exercised in real use yet; until it has, run
+`clean --dry-run` first and keep the schedule in trial mode.
+
+## Install
+
+```
+go install github.com/juanmhidalgo/devclean/cmd/devclean@latest
+devclean init        # write a config from what it finds; offers the trial schedule
+devclean report      # see what could be reclaimed; deletes nothing
+```
+
+Requires Go 1.27 or newer. `docker`, `uv`, `pre-commit` and `snap` are used
+when present and skipped otherwise.
 
 ## Usage
 
@@ -70,3 +86,7 @@ reintroduced; see [`docs/mutation-checks.md`](docs/mutation-checks.md).
 - [`docs/lessons-from-prototype.md`](docs/lessons-from-prototype.md) — what a
   working prototype taught: what fills a disk, how to tell "unused" apart from
   "used rarely", and the deletion bugs reviews caught.
+
+## License
+
+MIT — see [`LICENSE`](LICENSE).
