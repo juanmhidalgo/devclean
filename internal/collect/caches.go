@@ -20,9 +20,9 @@ const cachesCategory = "caches"
 // Caches collects package-manager caches and tool-native prune actions.
 //
 // Cache locations are resolved without invoking the tool: from the tool's env
-// var when set, else from a base dir injected by the caller (CacheDir comes
-// from platform.CacheDir(); Home is the user's home directory). The collector
-// never spells an XDG fallback itself.
+// var when set, else from a base dir injected by the caller (CacheDir and
+// DataDir come from platform.CacheDir() and platform.DataDir(); Home is the
+// user's home directory). The collector never spells an XDG fallback itself.
 //
 // Tools needed for a native prune (uv, pre-commit) are probed with
 // `<tool> --version`. A tool that is not installed yields no candidate and no
@@ -38,6 +38,7 @@ type Caches struct {
 	Mount    func(path string) (platform.Mount, error)
 	Home     string
 	CacheDir string
+	DataDir  string
 }
 
 var _ Collector = (*Caches)(nil)
@@ -72,7 +73,10 @@ func (c *Caches) Collect(ctx context.Context) Result {
 		{filepath.Join(cargo, "registry", "cache"), classify.TierCaches, "cargo registry cache"},
 		{envOr("UV_CACHE_DIR", filepath.Join(c.CacheDir, "uv")), classify.TierCaches, "uv cache"},
 		{envOr("YARN_CACHE_FOLDER", filepath.Join(c.CacheDir, "yarn")), classify.TierCaches, "yarn classic cache"},
-		{filepath.Join(c.Home, ".yarn", "berry", "cache"), classify.TierManual, "yarn berry global cache; projects may depend on it"},
+		{envOr("PIPENV_CACHE_DIR", filepath.Join(c.CacheDir, "pipenv")), classify.TierCaches, "pipenv cache"},
+	}
+	for _, p := range c.yarnBerryCaches() {
+		dirs = append(dirs, cacheDir{p, classify.TierManual, "yarn berry global cache; projects may depend on it"})
 	}
 	if p := os.Getenv("PNPM_STORE_DIR"); p != "" {
 		dirs = append(dirs, cacheDir{p, classify.TierCaches, "pnpm store"})
@@ -115,6 +119,23 @@ func (c *Caches) Collect(ctx context.Context) Result {
 		}
 	}
 	return res
+}
+
+// yarnBerryCaches returns where yarn berry may keep its global cache. Yarn
+// uses $YARN_GLOBAL_FOLDER, else $XDG_DATA_HOME/yarn/berry when XDG_DATA_HOME
+// is set, else ~/.yarn/berry. Whether XDG_DATA_HOME was set depends on the
+// shell yarn ran from, so without an override both defaults are returned.
+func (c *Caches) yarnBerryCaches() []string {
+	if g := os.Getenv("YARN_GLOBAL_FOLDER"); g != "" {
+		return []string{filepath.Join(g, "cache")}
+	}
+	paths := []string{filepath.Join(c.Home, ".yarn", "berry", "cache")}
+	if c.DataDir != "" {
+		if p := filepath.Join(c.DataDir, "yarn", "berry", "cache"); p != paths[0] {
+			paths = append(paths, p)
+		}
+	}
+	return paths
 }
 
 func tierFromName(s string) classify.Tier {

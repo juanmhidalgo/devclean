@@ -24,7 +24,7 @@ func realCollectors(plat platform.Platform, now func() time.Time) func(config.Co
 			&collect.Projects{Config: cfg, Mount: plat.MountFor, History: hist, Now: now},
 			&collect.Docker{Config: cfg, History: hist, Now: now},
 			&collect.Venvs{PipenvDir: pipenv, PoetryDir: filepath.Join(plat.CacheDir(), "pypoetry", "virtualenvs")},
-			&collect.Caches{Config: cfg, Mount: plat.MountFor, Home: home, CacheDir: plat.CacheDir()},
+			&collect.Caches{Config: cfg, Mount: plat.MountFor, Home: home, CacheDir: plat.CacheDir(), DataDir: plat.DataDir()},
 			&collect.System{Items: plat.SystemItems},
 			&collect.Watch{Config: cfg, Home: home},
 		}

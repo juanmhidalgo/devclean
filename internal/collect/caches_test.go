@@ -24,18 +24,18 @@ func writeSized(t *testing.T, path string, n int) {
 
 // cachesFixture isolates the tool env vars and returns a collector rooted in
 // temp dirs plus those dirs.
-func cachesFixture(t *testing.T) (c *Caches, home, cacheDir string) {
+func cachesFixture(t *testing.T) (c *Caches, home, cacheDir, dataDir string) {
 	t.Helper()
-	for _, k := range []string{"npm_config_cache", "PIP_CACHE_DIR", "GOMODCACHE", "GOCACHE", "CARGO_HOME", "UV_CACHE_DIR", "YARN_CACHE_FOLDER", "PNPM_STORE_DIR"} {
+	for _, k := range []string{"npm_config_cache", "PIP_CACHE_DIR", "GOMODCACHE", "GOCACHE", "CARGO_HOME", "UV_CACHE_DIR", "YARN_CACHE_FOLDER", "YARN_GLOBAL_FOLDER", "PIPENV_CACHE_DIR", "PNPM_STORE_DIR"} {
 		t.Setenv(k, "")
 	}
 	root := t.TempDir()
-	home, cacheDir = filepath.Join(root, "home"), filepath.Join(root, "cache")
+	home, cacheDir, dataDir = filepath.Join(root, "home"), filepath.Join(root, "cache"), filepath.Join(root, "data")
 	c = &Caches{
-		Home: home, CacheDir: cacheDir,
+		Home: home, CacheDir: cacheDir, DataDir: dataDir,
 		Mount: func(string) (platform.Mount, error) { return platform.Mount{Device: "8:1"}, nil },
 	}
-	return c, home, cacheDir
+	return c, home, cacheDir, dataDir
 }
 
 func findCand(res Result, path string) (classify.Candidate, bool) {
@@ -49,7 +49,7 @@ func findCand(res Result, path string) (classify.Candidate, bool) {
 
 func TestCachesCollector(t *testing.T) {
 	t.Run("failing tools are skipped with status and output, locations resolved without npm", func(t *testing.T) {
-		c, home, cacheDir := cachesFixture(t)
+		c, home, cacheDir, _ := cachesFixture(t)
 		testenv.FakeBin(t, "uv", `echo "no version is set for shim"; exit 1`)
 		testenv.FakeBin(t, "pre-commit", `exit 2`)
 		marker := filepath.Join(t.TempDir(), "npm-ran")
@@ -62,7 +62,8 @@ func TestCachesCollector(t *testing.T) {
 		gobuild := filepath.Join(cacheDir, "go-build")
 		cargoReg := filepath.Join(cargo, "registry", "cache")
 		gomod := os.Getenv("GOMODCACHE")
-		for _, p := range []string{npm, pip, gobuild, cargoReg, gomod} {
+		pipenv := filepath.Join(cacheDir, "pipenv")
+		for _, p := range []string{npm, pip, gobuild, cargoReg, gomod, pipenv} {
 			writeSized(t, filepath.Join(p, "f"), 10)
 		}
 
@@ -87,7 +88,7 @@ func TestCachesCollector(t *testing.T) {
 				t.Errorf("unexpected skip reason %q", s.Reason)
 			}
 		}
-		for _, p := range []string{npm, pip, gobuild, cargoReg, gomod} {
+		for _, p := range []string{npm, pip, gobuild, cargoReg, gomod, pipenv} {
 			cand, ok := findCand(res, p)
 			if !ok {
 				t.Errorf("missing candidate %s", p)
@@ -102,18 +103,45 @@ func TestCachesCollector(t *testing.T) {
 		}
 	})
 
-	t.Run("yarn berry global cache is manual", func(t *testing.T) {
-		c, home, _ := cachesFixture(t)
-		p := filepath.Join(home, ".yarn", "berry", "cache")
-		writeSized(t, filepath.Join(p, "f"), 5)
-		cand, ok := findCand(c.Collect(context.Background()), p)
-		if !ok || cand.Tier != classify.TierManual {
-			t.Fatalf("cand = %+v ok=%v", cand, ok)
+	t.Run("yarn berry global cache is manual in both default locations", func(t *testing.T) {
+		// Yarn uses $XDG_DATA_HOME/yarn/berry when XDG_DATA_HOME is set and
+		// ~/.yarn/berry otherwise, so one machine can hold both.
+		c, home, _, dataDir := cachesFixture(t)
+		paths := []string{filepath.Join(home, ".yarn", "berry", "cache"), filepath.Join(dataDir, "yarn", "berry", "cache")}
+		for _, p := range paths {
+			writeSized(t, filepath.Join(p, "f"), 5)
+		}
+		res := c.Collect(context.Background())
+		for _, p := range paths {
+			cand, ok := findCand(res, p)
+			if !ok || cand.Tier != classify.TierManual {
+				t.Errorf("%s: cand = %+v ok=%v", p, cand, ok)
+			}
+		}
+	})
+
+	t.Run("YARN_GLOBAL_FOLDER replaces the default yarn berry locations", func(t *testing.T) {
+		c, home, _, dataDir := cachesFixture(t)
+		global := filepath.Join(t.TempDir(), "yarn-global")
+		t.Setenv("YARN_GLOBAL_FOLDER", global)
+		def := filepath.Join(home, ".yarn", "berry", "cache")
+		xdg := filepath.Join(dataDir, "yarn", "berry", "cache")
+		for _, p := range []string{def, xdg, filepath.Join(global, "cache")} {
+			writeSized(t, filepath.Join(p, "f"), 5)
+		}
+		res := c.Collect(context.Background())
+		if cand, ok := findCand(res, filepath.Join(global, "cache")); !ok || cand.Tier != classify.TierManual {
+			t.Errorf("global cand = %+v ok=%v", cand, ok)
+		}
+		for _, p := range []string{def, xdg} {
+			if _, ok := findCand(res, p); ok {
+				t.Errorf("default location %s reported despite YARN_GLOBAL_FOLDER", p)
+			}
 		}
 	})
 
 	t.Run("user cache_paths keep their tier", func(t *testing.T) {
-		c, _, _ := cachesFixture(t)
+		c, _, _, _ := cachesFixture(t)
 		dir := t.TempDir()
 		writeSized(t, filepath.Join(dir, "f"), 7)
 		c.Config = config.Config{CachePaths: []config.CachePath{{Path: dir, Tier: "garbage"}}}
@@ -124,7 +152,7 @@ func TestCachesCollector(t *testing.T) {
 	})
 
 	t.Run("working tools yield garbage prune actions", func(t *testing.T) {
-		c, _, _ := cachesFixture(t)
+		c, _, _, _ := cachesFixture(t)
 		testenv.FakeBin(t, "uv", `exit 0`)
 		testenv.FakeBin(t, "pre-commit", `exit 0`)
 		res := c.Collect(context.Background())
@@ -141,7 +169,7 @@ func TestCachesCollector(t *testing.T) {
 }
 
 func TestCachesRevalidator(t *testing.T) {
-	c, home, _ := cachesFixture(t)
+	c, home, _, _ := cachesFixture(t)
 	dir := filepath.Join(home, "go", "pkg", "mod")
 	writeSized(t, filepath.Join(dir, "m", "f"), 10)
 	res := c.Collect(context.Background())
