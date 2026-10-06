@@ -10,7 +10,7 @@ A single Go binary. **Status: v1 implemented on Linux; macOS is unsupported.**
 
 ```
 devclean                          # show this help
-devclean report [--summary]       # show what could be reclaimed; deletes nothing
+devclean report [--summary] [--notify [--quiet]]  # show what could be reclaimed; deletes nothing
 devclean clean [--dry-run] [--yes] [--quiet]
 devclean observe                  # record usage observations; deletes nothing
 devclean schedule install [--report-only]
@@ -18,7 +18,9 @@ devclean schedule uninstall
 ```
 
 - `report --summary` shows only the totals per tier and per category, without
-  the item list (not combinable with `--json`).
+  the item list (not combinable with `--json`). `report --notify` sends that
+  summary, headed by the disk usage, to `notify_command`; with `--quiet` only
+  when a filesystem is above the pressure threshold or a collector was skipped.
 - `clean` deletes garbage and pressure-driven caches; stale items are deleted
   only when chosen (or with `--yes`). `--dry-run` prints what it would delete
   and records nothing; `--quiet` notifies only when something needs attention.
@@ -36,7 +38,8 @@ devclean schedule uninstall
   tool-native prune, a volume docker does not size) show as `-`, and as
   `"size_unknown": true` in JSON.
 - `schedule install` schedules `observe` hourly and `clean` on the configured
-  cadence; `--report-only` schedules `report` instead (trial mode).
+  cadence; `--report-only` schedules `report` instead (trial mode), with
+  `--notify` when `notify_command` is configured.
 - Config lives at `$XDG_CONFIG_HOME/devclean/config.toml`.
 - Exit codes: `0` ok, `1` fatal error, `2` partial run (a skipped collector, a
   failed deletion or a failed notification).

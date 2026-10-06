@@ -98,6 +98,13 @@ func TestLinuxScheduleUnits(t *testing.T) {
 		if !strings.Contains(clean, "ExecStart=/opt/bin/devclean report\n") || strings.Contains(clean, "clean --quiet") {
 			t.Errorf("clean service should run report:\n%s", clean)
 		}
+		s.Notify = true
+		if err := (Linux{UnitDir: dir}).InstallSchedule(s); err != nil {
+			t.Fatal(err)
+		}
+		if clean := readUnit(t, dir, "devclean-clean.service"); !strings.Contains(clean, "ExecStart=/opt/bin/devclean report --notify\n") {
+			t.Errorf("report-only with Notify should run report --notify:\n%s", clean)
+		}
 	})
 
 	t.Run("uninstall disables and removes (AC-37)", func(t *testing.T) {

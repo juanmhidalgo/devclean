@@ -14,6 +14,7 @@ import (
 	"github.com/juanmhidalgo/devclean/internal/collect"
 	"github.com/juanmhidalgo/devclean/internal/config"
 	"github.com/juanmhidalgo/devclean/internal/history"
+	"github.com/juanmhidalgo/devclean/internal/platform"
 	"github.com/juanmhidalgo/devclean/internal/remove"
 	"github.com/juanmhidalgo/devclean/internal/testenv"
 )
@@ -387,4 +388,88 @@ func checkFilterTiersHelper(t *testing.T) {
 	if all := filterTiers(cands, nil); len(all) != 4 {
 		t.Errorf("nil set dropped candidates: %v", all)
 	}
+}
+
+func TestReportNotify(t *testing.T) {
+	// notifyEnv is cleanEnv with notify_command saving the body to a file,
+	// and statfs reporting usedPct percent.
+	notifyEnv := func(t *testing.T, usedPct uint64) (*reportEnv, string) {
+		t.Helper()
+		e := cleanEnv(t)
+		body := filepath.Join(t.TempDir(), "body")
+		testenv.FakeBin(t, "savenotify", "cat > "+body)
+		writeTestFile(t, filepath.Join(e.cfgDir, "config.toml"), "notify_command = \"savenotify\"\n")
+		e.a.platform = withStatfs(e.a.platform.(fakePlatform), func(string) platform.FSUsage {
+			return platform.FSUsage{ID: "fs1", Used: usedPct, Avail: 100 - usedPct}
+		})
+		return e, body
+	}
+
+	t.Run("--notify sends the summary and disk usage on stdin and deletes nothing", func(t *testing.T) {
+		e, body := notifyEnv(t, 40)
+		if code := e.run("report", "--notify"); code != 0 {
+			t.Fatalf("exit = %d, stderr %q", code, e.stderr.String())
+		}
+		b, err := os.ReadFile(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{"Disk 40% used (pressure at 85%)", "Reclaimable"} {
+			if !strings.Contains(string(b), want) {
+				t.Errorf("body lacks %q:\n%s", want, b)
+			}
+		}
+		if strings.Contains(string(b), "\x1b[") {
+			t.Errorf("body has color escapes:\n%q", b)
+		}
+		if len(e.deletes) != 0 {
+			t.Errorf("report deleted %v", e.deletes)
+		}
+	})
+
+	t.Run("--quiet notifies only above pressure", func(t *testing.T) {
+		e, body := notifyEnv(t, 40)
+		if code := e.run("report", "--notify", "--quiet"); code != 0 {
+			t.Fatalf("exit = %d, stderr %q", code, e.stderr.String())
+		}
+		if _, err := os.Stat(body); err == nil {
+			t.Error("--quiet notified on a healthy run")
+		}
+		e, body = notifyEnv(t, 90)
+		if code := e.run("report", "--notify", "--quiet"); code != 0 {
+			t.Fatalf("exit = %d, stderr %q", code, e.stderr.String())
+		}
+		if b, err := os.ReadFile(body); err != nil || !strings.Contains(string(b), "Disk 90% used") {
+			t.Errorf("above pressure: body = %q (err %v)", b, err)
+		}
+	})
+
+	t.Run("a failing notify_command exits 2", func(t *testing.T) {
+		e, _ := notifyEnv(t, 40)
+		testenv.FakeBin(t, "failnotify", "echo boom; exit 1")
+		writeTestFile(t, filepath.Join(e.cfgDir, "config.toml"), "notify_command = \"failnotify\"\n")
+		if code := e.run("report", "--notify"); code != 2 {
+			t.Errorf("exit = %d, want 2", code)
+		}
+		if !strings.Contains(e.stderr.String(), "boom") {
+			t.Errorf("stderr lacks notify error: %q", e.stderr.String())
+		}
+	})
+
+	t.Run("--notify without notify_command exits 1 naming the key", func(t *testing.T) {
+		e := cleanEnv(t)
+		if code := e.run("report", "--notify"); code != 1 {
+			t.Errorf("exit = %d, want 1", code)
+		}
+		if !strings.Contains(e.stderr.String(), "notify_command") {
+			t.Errorf("stderr = %q", e.stderr.String())
+		}
+	})
+
+	t.Run("--quiet without --notify exits 1", func(t *testing.T) {
+		e := cleanEnv(t)
+		if code := e.run("report", "--quiet"); code != 1 {
+			t.Errorf("exit = %d, want 1", code)
+		}
+	})
 }

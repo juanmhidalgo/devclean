@@ -57,20 +57,10 @@ func (a *app) runClean(ctx context.Context, opts cleanOptions) int {
 		return code
 	}
 
-	fsPaths := map[string]string{} // FSID -> a filesystem path on it
-	for _, c := range s.candidates {
-		if _, ok := fsPaths[c.FSID]; !ok && c.FSID != "" && filepath.IsAbs(c.Path) {
-			fsPaths[c.FSID] = c.Path
-		}
-	}
-	before := a.statfsAll(fsPaths)
+	fsPaths, before, above := a.pressure(s)
 	stats := map[string]classify.FSStat{}
-	above := false
 	for id, u := range before {
 		stats[id] = classify.FSStat{Used: u.Used, Avail: u.Avail}
-		if classify.DiskPercent(u.Used, u.Avail) >= float64(s.cfg.PressurePercent) {
-			above = true
-		}
 	}
 
 	// --json is non-interactive: stale items need --yes.

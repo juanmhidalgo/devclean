@@ -50,6 +50,18 @@ func TestScheduleCommand(t *testing.T) {
 		}
 	})
 
+	t.Run("report-only notifies when notify_command is configured", func(t *testing.T) {
+		e, installs, _ := setup(t, fakePlatform{euid: 1000})
+		writeTestFile(t, filepath.Join(e.cfgDir, "config.toml"), "notify_command = \"notify\"\n")
+		if code := e.run("schedule", "install", "--report-only"); code != 0 {
+			t.Fatalf("exit = %d, stderr %q", code, e.stderr.String())
+		}
+		want := []platform.ScheduleSpec{{Binary: "/opt/devclean", PATH: "/usr/bin:/bin", CleanCadence: "weekly", ReportOnly: true, Notify: true}}
+		if !reflect.DeepEqual(*installs, want) {
+			t.Errorf("installs = %+v, want %+v", *installs, want)
+		}
+	})
+
 	t.Run("invalid config exits 1 without installing", func(t *testing.T) {
 		e, installs, _ := setup(t, fakePlatform{euid: 1000})
 		if err := os.MkdirAll(e.cfgDir, 0o755); err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,6 +14,8 @@ import (
 	"github.com/juanmhidalgo/devclean/internal/collect"
 	"github.com/juanmhidalgo/devclean/internal/config"
 	"github.com/juanmhidalgo/devclean/internal/history"
+	"github.com/juanmhidalgo/devclean/internal/notify"
+	"github.com/juanmhidalgo/devclean/internal/platform"
 	"github.com/juanmhidalgo/devclean/internal/report"
 )
 
@@ -199,15 +202,29 @@ func (a *app) scan(ctx context.Context, opts runOptions) (*scan, int) {
 	return s, 0
 }
 
+// reportOptions are the report-only flags.
+type reportOptions struct {
+	summary bool
+	notify  bool
+	quiet   bool
+}
+
 // runReport is the read-only default: it scans and renders, never deleting and
 // never saving history (observe and clean persist observations).
-func (a *app) runReport(ctx context.Context, opts runOptions, summary bool) int {
+func (a *app) runReport(ctx context.Context, opts runOptions, ro reportOptions) int {
+	summary := ro.summary
 	if summary && opts.json {
 		return a.fatal(errors.New("--summary cannot be combined with --json"))
+	}
+	if ro.quiet && !ro.notify {
+		return a.fatal(errors.New("--quiet only applies with --notify"))
 	}
 	s, code := a.scan(ctx, opts)
 	if code != 0 {
 		return code
+	}
+	if ro.notify && s.cfg.NotifyCommand == "" {
+		return a.fatal(errors.New("--notify needs notify_command in the config file"))
 	}
 	r := report.Report{
 		Candidates: s.candidates,
@@ -227,5 +244,57 @@ func (a *app) runReport(ctx context.Context, opts runOptions, summary bool) int 
 	if err := render(a.stdout, r); err != nil {
 		return a.fatal(err)
 	}
-	return exitCode(runOutcome{SkippedCollectors: len(s.skipped)})
+	out := runOutcome{SkippedCollectors: len(s.skipped)}
+	if ro.notify {
+		_, before, above := a.pressure(s)
+		out.AbovePressure = above
+		if notify.ShouldNotify(out.summary(), ro.quiet) {
+			out.NotifyErr = a.sendReport(ctx, s, r, before)
+		}
+	}
+	return exitCode(out)
+}
+
+// sendReport sends the summary, headed by the fullest filesystem's usage, to
+// notify_command.
+func (a *app) sendReport(ctx context.Context, s *scan, r report.Report, usage map[string]platform.FSUsage) error {
+	var b strings.Builder
+	if pct, ok := maxDiskPercent(usage); ok {
+		fmt.Fprintf(&b, "Disk %.0f%% used (pressure at %d%%)\n\n", pct, s.cfg.PressurePercent)
+	}
+	r.Color = false
+	if err := report.RenderSummary(&b, r); err != nil {
+		return err
+	}
+	if err := notify.Send(ctx, s.cfg.NotifyCommand, b.String()); err != nil {
+		a.stderrf("devclean: notification failed: %v\n", err)
+		return err
+	}
+	return nil
+}
+
+func maxDiskPercent(usage map[string]platform.FSUsage) (float64, bool) {
+	var max float64
+	for _, u := range usage {
+		max = math.Max(max, classify.DiskPercent(u.Used, u.Avail))
+	}
+	return max, len(usage) > 0
+}
+
+// pressure stats one path per filesystem that holds a candidate. above is
+// whether any of them is at or above the configured pressure threshold.
+func (a *app) pressure(s *scan) (paths map[string]string, usage map[string]platform.FSUsage, above bool) {
+	paths = map[string]string{} // FSID -> a filesystem path on it
+	for _, c := range s.candidates {
+		if _, ok := paths[c.FSID]; !ok && c.FSID != "" && filepath.IsAbs(c.Path) {
+			paths[c.FSID] = c.Path
+		}
+	}
+	usage = a.statfsAll(paths)
+	for _, u := range usage {
+		if classify.DiskPercent(u.Used, u.Avail) >= float64(s.cfg.PressurePercent) {
+			above = true
+		}
+	}
+	return paths, usage, above
 }

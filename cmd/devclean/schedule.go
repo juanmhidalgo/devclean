@@ -57,6 +57,7 @@ func (a *app) runScheduleInstall(reportOnly bool) int {
 		PATH:         os.Getenv("PATH"),
 		CleanCadence: cfg.CleanCadence,
 		ReportOnly:   reportOnly,
+		Notify:       cfg.NotifyCommand != "",
 	})
 	if err != nil {
 		return a.fatal(err)

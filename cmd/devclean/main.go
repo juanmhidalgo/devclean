@@ -69,17 +69,19 @@ func newRootCmd(a *app, code *int) *cobra.Command {
 	pf.StringSliceVar(&opts.roots, "root", nil, "scan this root instead of the configured ones (repeatable)")
 	pf.BoolVar(&opts.json, "json", false, "emit one JSON document")
 	pf.StringVar(&opts.color, "color", "auto", "color the output: auto, always or never")
-	var summary bool
+	var ro reportOptions
 	reportCmd := &cobra.Command{
 		Use:   "report",
 		Short: "Show what could be reclaimed; deletes nothing",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			*code = a.runReport(cmd.Context(), opts, summary)
+			*code = a.runReport(cmd.Context(), opts, ro)
 			return nil
 		},
 	}
-	reportCmd.Flags().BoolVar(&summary, "summary", false, "show only totals per tier and category")
+	reportCmd.Flags().BoolVar(&ro.summary, "summary", false, "show only totals per tier and category")
+	reportCmd.Flags().BoolVar(&ro.notify, "notify", false, "send the summary to notify_command")
+	reportCmd.Flags().BoolVar(&ro.quiet, "quiet", false, "with --notify: notify only when something needs attention")
 	root.AddCommand(reportCmd)
 	var co cleanOptions
 	clean := &cobra.Command{

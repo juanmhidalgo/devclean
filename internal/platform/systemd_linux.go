@@ -97,6 +97,9 @@ func (l Linux) InstallSchedule(spec ScheduleSpec) error {
 	cleanArgs, cleanDesc := []string{"clean", "--quiet"}, "devclean scheduled clean"
 	if spec.ReportOnly {
 		cleanArgs, cleanDesc = []string{"report"}, "devclean scheduled report (trial mode)"
+		if spec.Notify {
+			cleanArgs = append(cleanArgs, "--notify")
+		}
 	}
 	files := map[string]string{
 		observeUnit + ".service": serviceUnit("devclean observe", spec.Binary, []string{"observe"}, spec.PATH),

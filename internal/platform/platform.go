@@ -53,6 +53,9 @@ type ScheduleSpec struct {
 	CleanCadence string
 	// ReportOnly installs the clean job as a read-only report (trial mode).
 	ReportOnly bool
+	// Notify makes the report-only job send its result to notify_command.
+	// The clean job always notifies when notify_command is set.
+	Notify bool
 }
 
 // FSUsage is a platform-neutral statfs result, df-like: Used excludes
