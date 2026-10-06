@@ -2,6 +2,8 @@ package classify
 
 import (
 	"math"
+	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -70,11 +72,30 @@ func TestPlanClean(t *testing.T) {
 			if got := paths(res.Delete); !equalStrings(got, tt.want) {
 				t.Errorf("Delete = %v, want %v", got, tt.want)
 			}
-			if (len(res.Notices) > 0) != tt.wantNotice {
-				t.Errorf("Notices = %v, wantNotice %v", res.Notices, tt.wantNotice)
+			staleNotice := false
+			for _, n := range res.Notices {
+				staleNotice = staleNotice || strings.HasPrefix(n, "stale items skipped")
+			}
+			if staleNotice != tt.wantNotice {
+				t.Errorf("Notices = %v, want stale notice %v", res.Notices, tt.wantNotice)
 			}
 		})
 	}
+
+	t.Run("kept caches get one notice per filesystem saying why", func(t *testing.T) {
+		cacheCold2 := Candidate{Tier: TierCaches, Category: CategoryCaches, Path: "cc2", FSID: "cold"}
+		res := PlanClean([]Candidate{cacheHot, cacheCold, cacheCold2, cacheUnknown}, stats, 85, PlanOptions{TTY: true})
+		want := []string{
+			"caches kept: their filesystem is at 50.0%, below the 85% pressure threshold",
+			"caches kept: their filesystem's usage is unknown",
+		}
+		if !reflect.DeepEqual(res.Notices, want) {
+			t.Errorf("Notices = %q, want %q", res.Notices, want)
+		}
+		if res := PlanClean([]Candidate{cacheHot}, stats, 85, PlanOptions{TTY: true}); len(res.Notices) != 0 {
+			t.Errorf("caches under pressure got notices %q", res.Notices)
+		}
+	})
 
 	t.Run("pressure boundary is inclusive", func(t *testing.T) {
 		res := PlanClean([]Candidate{cacheCold}, stats, 50, PlanOptions{TTY: true})

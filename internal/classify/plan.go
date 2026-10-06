@@ -1,5 +1,7 @@
 package classify
 
+import "fmt"
+
 // FSStat is a df-like filesystem stat: reserved blocks are in neither field.
 type FSStat struct {
 	Used  uint64
@@ -29,7 +31,9 @@ func DiskPercent(used, avail uint64) float64 {
 	return float64(used) / float64(total) * 100
 }
 
-// PlanClean decides what to delete.
+// PlanClean decides what to delete. Caches kept because their filesystem is
+// below pressure (or could not be stat'ed) get one notice per filesystem, so
+// the report's reclaimable total is not mistaken for what clean deletes.
 func PlanClean(candidates []Candidate, fsStats map[string]FSStat, pressure float64, opts PlanOptions) PlanResult {
 	var res PlanResult
 	selected := make(map[int]bool, len(opts.Selection))
@@ -38,6 +42,8 @@ func PlanClean(candidates []Candidate, fsStats map[string]FSStat, pressure float
 	}
 	staleBlocked := false
 	staleN := 0
+	var keptFS []string // FSIDs holding kept caches, in first-seen order
+	kept := map[string]bool{}
 	for _, c := range candidates {
 		switch c.Tier {
 		case TierGarbage:
@@ -46,6 +52,9 @@ func PlanClean(candidates []Candidate, fsStats map[string]FSStat, pressure float
 			st, ok := fsStats[c.FSID]
 			if ok && DiskPercent(st.Used, st.Avail) >= pressure {
 				res.Delete = append(res.Delete, c)
+			} else if !kept[c.FSID] {
+				kept[c.FSID] = true
+				keptFS = append(keptFS, c.FSID)
 			}
 		case TierStale:
 			staleN++
@@ -57,6 +66,14 @@ func PlanClean(candidates []Candidate, fsStats map[string]FSStat, pressure float
 			case selected[staleN]:
 				res.Delete = append(res.Delete, c)
 			}
+		}
+	}
+	for _, id := range keptFS {
+		if st, ok := fsStats[id]; ok {
+			res.Notices = append(res.Notices, fmt.Sprintf("caches kept: their filesystem is at %.1f%%, below the %.0f%% pressure threshold",
+				DiskPercent(st.Used, st.Avail), pressure))
+		} else {
+			res.Notices = append(res.Notices, "caches kept: their filesystem's usage is unknown")
 		}
 	}
 	if staleBlocked {

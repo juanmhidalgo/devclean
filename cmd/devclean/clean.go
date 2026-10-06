@@ -117,7 +117,7 @@ func (a *app) runClean(ctx context.Context, opts cleanOptions) int {
 	if base.Freed == nil {
 		base.Freed = map[string]int64{}
 	}
-	summary := summarize(outcomes, freed)
+	summary := summarize(outcomes, freed, a.mountLabel(fsPaths))
 	if saveErr != nil {
 		summary += "  " + saveErr.Error() + "\n"
 	}
@@ -224,8 +224,22 @@ func applyObservations(h history.History, obs []collect.Observation) history.His
 	return out
 }
 
-// summarize is the human clean summary, also the notification body.
-func summarize(outcomes []remove.Outcome, freed map[string]int64) string {
+// mountLabel names a filesystem by the mount point of a path on it, falling
+// back to its FSID when the mount cannot be found.
+func (a *app) mountLabel(fsPaths map[string]string) func(string) string {
+	return func(id string) string {
+		if p, ok := fsPaths[id]; ok {
+			if m, err := a.platform.MountFor(p); err == nil && m.Point != "" {
+				return m.Point
+			}
+		}
+		return id
+	}
+}
+
+// summarize is the human clean summary, also the notification body. label
+// names a filesystem by its FSID (see mountLabel).
+func summarize(outcomes []remove.Outcome, freed map[string]int64, label func(fsid string) string) string {
 	var del, skip, fail int
 	var b strings.Builder
 	for _, o := range outcomes {
@@ -246,7 +260,7 @@ func summarize(outcomes []remove.Outcome, freed map[string]int64) string {
 	}
 	sort.Strings(ids)
 	for _, id := range ids {
-		head += fmt.Sprintf("  freed on %s: %d bytes\n", id, freed[id])
+		head += fmt.Sprintf("  freed %s on %s\n", report.FormatSize(freed[id]), label(id))
 	}
 	return head + b.String()
 }

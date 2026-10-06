@@ -23,6 +23,8 @@ type fakePlatform struct {
 	uninstalls *int
 	// scheduleErr is returned by the schedule methods.
 	scheduleErr error
+	// mountPoint is the Point MountFor reports for every path.
+	mountPoint string
 }
 
 func (f fakePlatform) InstallSchedule(s platform.ScheduleSpec) error {
@@ -39,13 +41,15 @@ func (f fakePlatform) UninstallSchedule() error {
 	return f.scheduleErr
 }
 
-func (f fakePlatform) ConfigDir() string                     { return f.configDir }
-func (f fakePlatform) StateDir() string                      { return f.stateDir }
-func (f fakePlatform) CacheDir() string                      { return f.cacheDir }
-func (f fakePlatform) DataDir() string                       { return f.dataDir }
-func (f fakePlatform) Supported() error                      { return f.supported }
-func (f fakePlatform) Euid() int                             { return f.euid }
-func (fakePlatform) MountFor(string) (platform.Mount, error) { return platform.Mount{}, nil }
+func (f fakePlatform) ConfigDir() string { return f.configDir }
+func (f fakePlatform) StateDir() string  { return f.stateDir }
+func (f fakePlatform) CacheDir() string  { return f.cacheDir }
+func (f fakePlatform) DataDir() string   { return f.dataDir }
+func (f fakePlatform) Supported() error  { return f.supported }
+func (f fakePlatform) Euid() int         { return f.euid }
+func (f fakePlatform) MountFor(string) (platform.Mount, error) {
+	return platform.Mount{Point: f.mountPoint}, nil
+}
 
 func (f fakePlatform) Statfs(p string) (platform.FSUsage, error) {
 	if f.statfs != nil {

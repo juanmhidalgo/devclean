@@ -333,3 +333,40 @@ func withStatfs(p fakePlatform, f func(string) platform.FSUsage) fakePlatform {
 	p.statfs = f
 	return p
 }
+
+func TestCleanFreedNamesTheMount(t *testing.T) {
+	e := cleanEnv(t)
+	if code := e.run("clean", "--yes"); code != 0 {
+		t.Fatalf("exit = %d, stderr %q", code, e.stderr.String())
+	}
+	if !strings.Contains(e.stdout.String(), "freed 0 B on fs1\n") {
+		t.Errorf("without a mount point the FSID should name the filesystem:\n%s", e.stdout.String())
+	}
+	fp := e.a.platform.(fakePlatform)
+	fp.mountPoint = "/"
+	e.a.platform = fp
+	if code := e.run("clean", "--yes"); code != 0 {
+		t.Fatalf("exit = %d, stderr %q", code, e.stderr.String())
+	}
+	if !strings.Contains(e.stdout.String(), "freed 0 B on /\n") {
+		t.Errorf("summary should name the mount point:\n%s", e.stdout.String())
+	}
+}
+
+func TestSummarizeFreed(t *testing.T) {
+	label := func(id string) string {
+		if id == "259:7" {
+			return "/"
+		}
+		return id
+	}
+	got := summarize(nil, map[string]int64{"259:7": 82591744, "8:1": 0}, label)
+	for _, want := range []string{"  freed 78.8 MiB on /\n", "  freed 0 B on 8:1\n"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("summary lacks %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "bytes") {
+		t.Errorf("summary still shows raw bytes:\n%s", got)
+	}
+}

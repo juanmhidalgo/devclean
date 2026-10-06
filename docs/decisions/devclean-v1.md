@@ -29,17 +29,17 @@
 
 ## Pending QA — devclean-v1
 
-Unticked QA items:
+QA items. Ticked ones were verified on the author's machine (2026-10-06).
 
 ### Happy path
 - [ ] `devclean` on the dev machine prints all four tiers with sizes and changes nothing (compare `docker images` and `df` before/after).
-- [ ] `devclean clean --dry-run` lists the same items `clean` then deletes.
+- [x] `devclean clean --dry-run` lists the same items `clean` then deletes.
 - [ ] `devclean clean` removes dangling images and an image labelled `devclean.ephemeral=true` with no container.
 - [ ] Selecting `1,3` at the stale prompt deletes exactly items 1 and 3.
 - [ ] Reported freed space matches the `df` difference.
 - [ ] `--only docker` finishes without walking `$HOME` (noticeably faster).
 - [ ] `--json` output parses with `jq` and contains `schema_version`.
-- [ ] `devclean schedule install --report-only` creates a user timer; `systemctl --user list-timers` shows it; the job runs and logs a report.
+- [x] `devclean schedule install --report-only` creates a user timer; `systemctl --user list-timers` shows it; the job runs and logs a report.
 - [ ] `schedule uninstall` removes the units.
 - [ ] A pipenv venv for a deleted worktree is removed as garbage.
 - [ ] A notification arrives through `notify_command` with a body starting with `- `.
@@ -53,12 +53,12 @@ Unticked QA items:
 - [ ] Running `observe` while `clean` runs: both finish, history keeps both runs' entries.
 - [ ] Project restored between `report` and `clean`: its artifact is skipped with a reason.
 - [ ] A `noatime` mount produces one warning.
-- [ ] Below 85% disk, caches are listed but not deleted by `clean`.
+- [x] Below 85% disk, caches are listed but not deleted by `clean`.
 ### Empty states
 - [ ] Clean machine (nothing to reclaim): report says "nothing to reclaim" per tier, exit 0.
 - [ ] No Docker installed: `docker` shown as skipped with reason, exit 2, other categories work.
-- [ ] No config file: defaults used, no warning.
-- [ ] No history file yet (first run): classification works; file created after `observe`.
+- [x] No config file: defaults used, no warning.
+- [x] No history file yet (first run): classification works; file created after `observe`.
 - [ ] Stale prompt answered `none`: nothing deleted, exit 0.
 - [ ] Empty watch list: `watch` category shows nothing, no error.
 ### Error states
